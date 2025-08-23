@@ -2,7 +2,7 @@ services:
   - type: web
     name: youtube-no-ad-player
     env: static
-    buildCommand: npm run render-build
+    buildCommand: npm ci && npm run build
     staticPublishPath: ./build
     routes:
       - type: rewrite
