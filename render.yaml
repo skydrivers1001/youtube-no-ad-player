@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: youtuber-no-ad
+    name: youtube-no-ad-player
     env: static
     buildCommand: npm run render-build
     staticPublishPath: ./build
