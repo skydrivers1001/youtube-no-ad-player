@@ -2,12 +2,7 @@ services:
   - type: web
     name: youtuber-no-ad
     env: static
-    buildCommand: |
-      export REACT_APP_YOUTUBE_API_KEY=$REACT_APP_YOUTUBE_API_KEY
-      export REACT_APP_GOOGLE_CLIENT_ID=$REACT_APP_GOOGLE_CLIENT_ID
-      export REACT_APP_GOOGLE_CLIENT_SECRET=$REACT_APP_GOOGLE_CLIENT_SECRET
-      npm install
-      npm run build
+    buildCommand: npm run render-build
     staticPublishPath: ./build
     routes:
       - type: rewrite
