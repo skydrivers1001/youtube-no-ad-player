@@ -1,11 +1,17 @@
 services:
   - type: static_site
     name: youtube-no-ad-player
-    buildCommand: npm ci --legacy-peer-deps && npm run build
+    buildCommand: ./render-build.sh
     publishPath: build
     envVars:
       - key: NODE_OPTIONS
         value: --max-old-space-size=4096
+      - key: REACT_APP_YOUTUBE_API_KEY
+        sync: false
+      - key: REACT_APP_GOOGLE_CLIENT_ID
+        sync: false
+      - key: REACT_APP_GOOGLE_CLIENT_SECRET
+        sync: false
     routes:
       - type: rewrite
         source: /*
