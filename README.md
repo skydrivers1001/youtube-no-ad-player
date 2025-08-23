@@ -1,70 +1,76 @@
-# Getting Started with Create React App
+# YouTube 無廣告播放器
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+這是一個專為提供無干擾YouTube觀看體驗而設計的React應用程式。它提供了簡潔的界面，移除了廣告、推薦內容和其他分心元素，讓用戶專注於觀看影片內容。
 
-## Available Scripts
+## 核心功能
 
-In the project directory, you can run:
+### 影片播放
+- 無廣告播放YouTube影片
+- 自定義播放控制（播放/暫停、音量、靜音、播放進度、全螢幕切換）
+- 支援播放速度調整（0.25x - 2x）
+- 支援字幕顯示與語言選擇
 
-### `npm start`
+### 界面簡化
+- 無推薦影片干擾
+- 無留言區
+- 無側邊欄
+- 專注於影片內容的簡潔設計
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### 播放清單與收藏
+- 創建和管理自定義播放清單
+- 收藏喜愛的影片
+- 查看觀看歷史
+- 最近播放記錄
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### 搜尋功能
+- 搜尋YouTube影片
+- 搜尋頻道
+- 搜尋播放清單
+- 過濾搜尋結果（影片長度、上傳時間）
 
-### `npm test`
+### 個人化設置
+- 深色/淺色模式切換
+- 預設播放速度設置
+- 預設字幕語言設置
+- 自動播放設置
+- 背景播放選項
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### 便利功能
+- 畫中畫模式
+- 睡眠定時器
+- 快捷鍵支援
 
-### `npm run build`
+## 技術架構
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+本應用程式使用以下技術構建：
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- **React** - 用戶界面構建
+- **Redux** - 狀態管理
+- **React Router** - 路由管理
+- **Material-UI** - UI組件庫
+- **React YouTube** - YouTube播放器整合
+- **Axios** - API請求處理
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## 使用指南
 
-### `npm run eject`
+### 安裝與運行
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+# 安裝依賴
+npm install
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+# 啟動開發服務器
+npm start
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+應用將在 [http://localhost:3000](http://localhost:3000) 運行。
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### 構建生產版本
 
-## Learn More
+```bash
+npm run build
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 注意事項
 
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+本應用僅供學習和個人使用，請遵守YouTube的服務條款。應用不會下載或存儲任何YouTube內容，僅提供更簡潔的觀看界面。

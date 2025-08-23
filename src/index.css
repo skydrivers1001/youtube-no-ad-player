@@ -11,3 +11,28 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* YouTube播放器樣式 */
+.youtube-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.youtube-container.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999;
+}
+
+.youtube-player {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.youtube-iframe {
+  width: 100% !important;
+  height: 100% !important;
+}

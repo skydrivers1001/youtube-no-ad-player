@@ -1,13 +1,20 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { Provider } from 'react-redux';
+import store from './store';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+// 將 store 暴露到全局，以便 authService.js 可以訪問
+window.store = store;
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <Provider store={store}>
+      <App />
+    </Provider>
   </React.StrictMode>
 );
 
