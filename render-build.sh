@@ -8,10 +8,11 @@ export REACT_APP_GOOGLE_CLIENT_ID=$REACT_APP_GOOGLE_CLIENT_ID
 export REACT_APP_GOOGLE_CLIENT_SECRET=$REACT_APP_GOOGLE_CLIENT_SECRET
 
 # 安裝依賴並構建應用
-npm ci
+npm ci --include=dev
 
 # 確保 react-scripts 可執行
 export PATH="$PATH:$(pwd)/node_modules/.bin"
+ls -la $(pwd)/node_modules/.bin/
 
 # 構建應用
 npm run build
