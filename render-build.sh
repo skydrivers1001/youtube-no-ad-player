@@ -11,6 +11,10 @@ export REACT_APP_YOUTUBE_API_KEY=$REACT_APP_YOUTUBE_API_KEY
 export REACT_APP_GOOGLE_CLIENT_ID=$REACT_APP_GOOGLE_CLIENT_ID
 export REACT_APP_GOOGLE_CLIENT_SECRET=$REACT_APP_GOOGLE_CLIENT_SECRET
 
+# 增加 Node.js 堆內存限制，避免記憶體溢出錯誤
+export NODE_OPTIONS="--max-old-space-size=4096"
+echo "NODE_OPTIONS: $NODE_OPTIONS"
+
 # 安裝依賴並構建應用
 echo "Installing dependencies..."
 npm ci --include=dev
