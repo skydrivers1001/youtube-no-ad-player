@@ -78,5 +78,77 @@
       To begin the development, run `npm start` or `yarn start`.
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
+    
+    <!-- Service Worker 註冊 -->
+    <script>
+      // 註冊 Service Worker 以支援客戶端路由
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+              console.log('SW registered: ', registration);
+              
+              // 檢查是否有新的 Service Worker 等待啟用
+              if (registration.waiting) {
+                registration.waiting.postMessage({type: 'SKIP_WAITING'});
+              }
+              
+              // 監聽 Service Worker 更新
+              registration.addEventListener('updatefound', function() {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', function() {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('New SW available, will refresh on next navigation');
+                    }
+                  });
+                }
+              });
+            })
+            .catch(function(registrationError) {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+        
+        // 監聽 Service Worker 控制權變更
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+          console.log('SW controller changed, reloading page');
+          window.location.reload();
+        });
+      }
+      
+      // 客戶端路由恢復腳本
+      (function() {
+        // 檢查是否是深層連結且頁面載入失敗
+        function checkDeepLink() {
+          const path = window.location.pathname;
+          
+          // 如果不是首頁且 DOM 載入後沒有 React 內容
+          if (path !== '/' && document.readyState === 'complete') {
+            setTimeout(function() {
+              const root = document.getElementById('root');
+              if (root && root.children.length === 0) {
+                console.log('Deep link detected but React not loaded, attempting recovery');
+                
+                // 嘗試重新載入頁面
+                if (window.location.hash) {
+                  // 如果有 hash，保留它（OAuth 回調）
+                  window.location.href = window.location.href;
+                } else {
+                  // 否則重新載入當前頁面
+                  window.location.reload();
+                }
+              }
+            }, 2000);
+          }
+        }
+        
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', checkDeepLink);
+        } else {
+          checkDeepLink();
+        }
+      })();
+    </script>
   </body>
 </html>

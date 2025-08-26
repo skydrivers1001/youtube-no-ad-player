@@ -17,6 +17,11 @@ import { loginSuccess } from './store/authSlice';
 
 // UI組件
 import Navbar from './components/ui/Navbar';
+import NotFound from './components/ui/NotFound';
+
+// 路由組件
+import ErrorBoundary from './components/routing/ErrorBoundary';
+import RouteGuard from './components/routing/RouteGuard';
 
 // 樣式
 import './App.css';
@@ -59,24 +64,30 @@ function App() {
   );
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Router>
-        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-          <Navbar />
-          <Box component="main" sx={{ flexGrow: 1, py: 2 }}>
-            <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/watch/:videoId" element={<PlayerPage />} />
-          <Route path="/playlists" element={<PlaylistsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
-        </Routes>
-          </Box>
-        </Box>
-      </Router>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Router>
+          <RouteGuard>
+            <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+              <Navbar />
+              <Box component="main" sx={{ flexGrow: 1, py: 2 }} data-react-router-loaded="true">
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/search" element={<SearchPage />} />
+                  <Route path="/watch/:videoId" element={<PlayerPage />} />
+                  <Route path="/playlists" element={<PlaylistsPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
+                  {/* 404 處理 - 必須放在最後 */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Box>
+            </Box>
+          </RouteGuard>
+        </Router>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
