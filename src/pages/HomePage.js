@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
+import { useSelector } from 'react-redux';
 import { Box, Typography, Container, Grid, TextField, Button, InputAdornment, Paper, Card, CardContent, Fade, Grow } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import { FaYoutube, FaPlay, FaList, FaSearch } from 'react-icons/fa';
+import TrafficDisplay from '../components/statistics/TrafficDisplay';
 
 const HomePage = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const settings = useSelector((state) => state.settings);
   
   // 從 YouTube URL 提取影片 ID
   const extractVideoId = (url) => {
@@ -21,6 +24,27 @@ const HomePage = () => {
     
     if (!youtubeUrl.trim()) {
       setError('請輸入 YouTube 影片網址');
+      return;
+    }
+    
+    // 檢查是否為網站本身的網址
+    const isOwnSiteUrl = youtubeUrl.includes('youtube-no-ad-player.onrender.com') || 
+                        youtubeUrl.includes('localhost:3000');
+    
+    if (isOwnSiteUrl) {
+      // 如果是網站本身的網址，檢查是否包含影片 ID
+      const urlParts = youtubeUrl.split('/watch/');
+      if (urlParts.length > 1 && urlParts[1]) {
+        const videoId = urlParts[1].split('?')[0].split('#')[0]; // 移除查詢參數和錨點
+        if (videoId && videoId.length === 11) {
+          setError('');
+          navigate(`/watch/${videoId}`);
+          return;
+        }
+      }
+      // 如果是網站首頁網址，清空輸入框並提示
+      setYoutubeUrl('');
+      setError('');
       return;
     }
     
@@ -341,6 +365,22 @@ const HomePage = () => {
             </Grid>
           </Box>
         </Fade>
+        
+        {/* Traffic Statistics Section - 流量統計區塊 */}
+        {settings.showTrafficStats && (
+          <Grow in timeout={2400}>
+            <Box sx={{ mb: 6 }}>
+              <Box sx={{ 
+                '& .MuiAlert-root': { 
+                  mb: 2 
+                }
+                // 移除隱藏載入指示器的樣式，顯示 CircularProgress 以利除錯
+              }}>
+                <TrafficDisplay variant="full" />
+              </Box>
+            </Box>
+          </Grow>
+        )}
       </Container>
     </Box>
   );

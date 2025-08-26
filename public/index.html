@@ -25,6 +25,45 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>React App</title>
+    <!-- 開發時忽略跨來源第三方腳本丟出的通用 "Script error."，避免 CRA 錯誤覆蓋層誤報。
+         僅抑制 message 為 "Script error." 且 filename 為空的情況，不影響其他錯誤顯示。 -->
+    <script>
+      (function() {
+        function shouldIgnore(message, filename) {
+          return message === 'Script error.' && (!filename || filename === '');
+        }
+        function onErrorCapture(event) {
+          try {
+            if (shouldIgnore(event && event.message, event && event.filename)) {
+              event.preventDefault && event.preventDefault();
+              event.stopImmediatePropagation && event.stopImmediatePropagation();
+              return false;
+            }
+          } catch (e) {}
+        }
+        window.addEventListener('error', onErrorCapture, true);
+        var prevOnError = window.onerror;
+        window.onerror = function(message, source, lineno, colno, error) {
+          if (shouldIgnore(message, source)) {
+            return true; // 阻止預設處理
+          }
+          if (typeof prevOnError === 'function') {
+            return prevOnError(message, source, lineno, colno, error);
+          }
+        };
+        window.addEventListener(
+          'unhandledrejection',
+          function(event) {
+            var reason = event && event.reason;
+            if (reason && reason.message === 'Script error.') {
+              event.preventDefault && event.preventDefault();
+              event.stopImmediatePropagation && event.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

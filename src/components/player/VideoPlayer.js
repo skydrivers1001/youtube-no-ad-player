@@ -15,6 +15,7 @@ import {
 import YouTube from 'react-youtube';
 import usePictureInPicture from '../../hooks/usePictureInPicture';
 import { updateVideoProgress, selectVideoProgress, markVideoCompleted } from '../../store/progressSlice';
+import { recordDataUsage } from '../../store/statisticsSlice';
 
 const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
   const dispatch = useDispatch();
@@ -38,6 +39,24 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
   // 控制項顯示狀態
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef(null);
+  
+  // 檢測是否為觸控設備
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  
+  useEffect(() => {
+    const checkTouchDevice = () => {
+      return 'ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+    };
+    setIsTouchDevice(checkTouchDevice());
+  }, []);
+  
+  // 數據使用量追蹤
+  const [dataUsageTracker, setDataUsageTracker] = useState({
+    lastRecordedTime: 0,
+    totalWatchTime: 0,
+    estimatedDataUsage: 0 // MB
+  });
+  const dataUsageIntervalRef = useRef(null);
   
   // 畫中畫功能
   const { 
@@ -76,6 +95,13 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     // 設置預設音量
     ytPlayer.setVolume(playerState.volume);
     
+    // 記錄影片播放統計
+    if (videoId) {
+      // 記錄初始數據使用量（估算影片開始播放的數據消耗）
+      dispatch(recordDataUsage(5)); // 假設開始播放消耗5MB
+      console.log(`記錄影片播放數據使用: ${videoId}`);
+    }
+    
     // 恢復播放進度（延遲執行以確保影片已載入）
     if (savedProgress && savedProgress.currentTime > 5) {
       setTimeout(() => {
@@ -100,6 +126,13 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       playing: isPlaying,
       duration: player ? player.getDuration() : 0,
     }));
+    
+    // 數據使用量追蹤：開始或停止追蹤
+    if (isPlaying) {
+      startDataUsageTracking();
+    } else {
+      stopDataUsageTracking();
+    }
     
     // 如果影片播放結束，清除播放進度
     if (isEnded && player) {
@@ -143,10 +176,72 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     return () => clearInterval(interval);
   }, [player, playerState.playing, dispatch, videoId]);
   
+  // 數據使用量追蹤函數
+  const startDataUsageTracking = () => {
+    if (dataUsageIntervalRef.current) return; // 避免重複啟動
+    
+    const startTime = Date.now();
+    setDataUsageTracker(prev => ({ ...prev, lastRecordedTime: startTime }));
+    
+    dataUsageIntervalRef.current = setInterval(() => {
+      const currentTime = Date.now();
+      const timeDiff = (currentTime - dataUsageTracker.lastRecordedTime) / 1000; // 秒
+      
+      if (timeDiff > 0) {
+        // 估算數據使用量：假設720p影片約2MB/分鐘，1080p約4MB/分鐘
+        // 這裡使用保守估計3MB/分鐘
+        const estimatedUsageMB = (timeDiff / 60) * 3;
+        
+        setDataUsageTracker(prev => {
+          const newEstimatedUsage = prev.estimatedDataUsage + estimatedUsageMB;
+          
+          // 每30秒記錄一次到Redux store
+            if (newEstimatedUsage >= 30) { // 累積30MB後記錄
+              dispatch(recordDataUsage(newEstimatedUsage));
+            
+            return {
+              ...prev,
+              lastRecordedTime: currentTime,
+              totalWatchTime: prev.totalWatchTime + timeDiff,
+              estimatedDataUsage: 0 // 重置本地累積
+            };
+          }
+          
+          return {
+            ...prev,
+            lastRecordedTime: currentTime,
+            totalWatchTime: prev.totalWatchTime + timeDiff,
+            estimatedDataUsage: newEstimatedUsage
+          };
+        });
+      }
+    }, 5000); // 每5秒檢查一次
+  };
+  
+  const stopDataUsageTracking = () => {
+    if (dataUsageIntervalRef.current) {
+      clearInterval(dataUsageIntervalRef.current);
+      dataUsageIntervalRef.current = null;
+      
+      // 停止時記錄剩餘的數據使用量
+      if (dataUsageTracker.estimatedDataUsage > 0) {
+        dispatch(recordDataUsage(dataUsageTracker.estimatedDataUsage));
+        
+        setDataUsageTracker(prev => ({
+          ...prev,
+          estimatedDataUsage: 0
+        }));
+      }
+    }
+  };
+  
   // 組件卸載時清除全螢幕模式的影響並儲存播放進度
   useEffect(() => {
     return () => {
       document.body.style.overflow = '';
+      
+      // 清理數據使用量追蹤
+      stopDataUsageTracking();
       
       // 在組件卸載時儲存最後的播放進度
       if (player && playerState.duration > 0 && playerState.currentTime > 5) {
@@ -167,15 +262,36 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       clearTimeout(controlsTimeoutRef.current);
     }
     
+    // 觸控設備延長顯示時間
+    const hideDelay = isTouchDevice ? 5000 : 3000;
+    
     controlsTimeoutRef.current = setTimeout(() => {
-      if (!playerState.paused) {
+      if (playerState.playing) {
         setShowControls(false);
       }
-    }, 3000);
+    }, hideDelay);
+  };
+  
+  // 處理觸控事件顯示控制項
+  const handleTouchInteraction = () => {
+    setShowControls(true);
+    
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    
+    // 觸控設備顯示更長時間
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (playerState.playing) {
+        setShowControls(false);
+      }
+    }, 5000);
   };
   
   // 播放/暫停
   const togglePlay = () => {
+    if (!player) return;
+    
     if (playerState.playing) {
       player.pauseVideo();
     } else {
@@ -278,6 +394,8 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
         }),
       }}
       onMouseMove={handleMouseMove}
+      onTouchStart={handleTouchInteraction}
+      onTouchMove={handleTouchInteraction}
     >
       {/* 左側雙擊區域 */}
       <Box 
@@ -316,6 +434,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
           zIndex: 1,
         }}
         onClick={togglePlay}
+        onTouchEnd={togglePlay}
       />
       
       {/* YouTube播放器 */}
@@ -362,8 +481,11 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
             background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
             transition: 'opacity 0.3s',
             opacity: showControls ? 1 : 0,
-            zIndex: 2,
+            zIndex: playerState.fullscreen ? 10000 : 2,
+            pointerEvents: 'auto',
           }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
         >
           {/* 進度條 */}
           <Box sx={{ mb: 1, position: 'relative' }}>

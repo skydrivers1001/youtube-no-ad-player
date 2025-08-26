@@ -141,6 +141,18 @@ const SettingsPage = () => {
             />
           </Box>
           
+          <Box sx={{ mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={settings.showTrafficStats}
+                  onChange={(e) => handleSettingChange('showTrafficStats', e.target.checked)}
+                />
+              }
+              label="顯示流量統計"
+            />
+          </Box>
+          
           <Box sx={{ mb: 3 }}>
             <Typography id="sleep-timer-slider" gutterBottom>
               睡眠定時器: {settings.sleepTimerMinutes > 0 ? `${settings.sleepTimerMinutes} 分鐘` : '關閉'}

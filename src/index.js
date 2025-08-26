@@ -9,6 +9,30 @@ import reportWebVitals from './reportWebVitals';
 // 將 store 暴露到全局，以便 authService.js 可以訪問
 window.store = store;
 
+// 在開發環境中忽略跨來源的 "Script error."，避免第三方腳本（如 YouTube Iframe API）
+// 造成的錯誤覆蓋層閃現，真正的應用錯誤仍會顯示
+if (process.env.NODE_ENV === 'development') {
+  const ignoreScriptErrorEvent = (event) => {
+    if (event?.message === 'Script error.' && (!event.filename || event.filename === '')) {
+      event.preventDefault?.();
+      return true;
+    }
+  };
+  window.addEventListener('error', ignoreScriptErrorEvent, true);
+  window.onerror = function (message, source) {
+    if (message === 'Script error.' && (!source || source === '')) {
+      // 返回 true 可阻止預設處理（舊版瀏覽器行為），配合上方 addEventListener 保險
+      return true;
+    }
+  };
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event?.reason;
+    if (reason && reason.message === 'Script error.') {
+      event.preventDefault?.();
+    }
+  });
+}
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>

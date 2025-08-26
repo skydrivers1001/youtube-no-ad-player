@@ -8,6 +8,7 @@ const initialState = {
   enableBackgroundPlay: true,
   enablePictureInPicture: true,
   sleepTimerMinutes: 0,
+  showTrafficStats: true, // 顯示流量統計，預設開啟
 };
 
 export const settingsSlice = createSlice({
@@ -35,6 +36,9 @@ export const settingsSlice = createSlice({
     setSleepTimer: (state, action) => {
       state.sleepTimerMinutes = action.payload;
     },
+    toggleTrafficStats: (state) => {
+      state.showTrafficStats = !state.showTrafficStats;
+    },
     updateSettings: (state, action) => {
       return { ...state, ...action.payload };
     },
@@ -49,6 +53,7 @@ export const {
   toggleBackgroundPlay,
   togglePictureInPicture,
   setSleepTimer,
+  toggleTrafficStats,
   updateSettings,
 } = settingsSlice.actions;
 
