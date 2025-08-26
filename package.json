@@ -17,7 +17,7 @@
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",
     "react-redux": "^9.2.0",
-    "react-router-dom": "^6.20.1",
+    "react-router-dom": "6.20.1",
     "react-scripts": "5.0.1",
     "react-youtube": "^10.1.0",
     "redux": "^5.0.1",
@@ -29,7 +29,7 @@
     "build": "node ./node_modules/react-scripts/bin/react-scripts.js build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "render-build": "chmod +x render-build.sh && ./render-build.sh"
+    "render-build": "npm ci --legacy-peer-deps || npm install --legacy-peer-deps && npm run build"
   },
   "eslintConfig": {
     "extends": [

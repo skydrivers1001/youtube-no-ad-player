@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { Box, IconButton, Slider, Typography, Grid, Paper, Tooltip } from '@mui/material';
 import { 
   FaPlay, 
@@ -14,9 +14,12 @@ import {
 } from 'react-icons/fa';
 import YouTube from 'react-youtube';
 import usePictureInPicture from '../../hooks/usePictureInPicture';
+import { updateVideoProgress, selectVideoProgress, markVideoCompleted } from '../../store/progressSlice';
 
 const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
+  const dispatch = useDispatch();
   const settings = useSelector((state) => state.settings);
+  const savedProgress = useSelector((state) => selectVideoProgress(state, videoId));
   
   // 播放器狀態
   const [player, setPlayer] = useState(null);
@@ -73,6 +76,14 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     // 設置預設音量
     ytPlayer.setVolume(playerState.volume);
     
+    // 恢復播放進度（延遲執行以確保影片已載入）
+    if (savedProgress && savedProgress.currentTime > 5) {
+      setTimeout(() => {
+        ytPlayer.seekTo(savedProgress.currentTime);
+        console.log(`恢復播放進度: ${Math.floor(savedProgress.currentTime)}秒 (${savedProgress.percentage.toFixed(1)}%)`);
+      }, 1000);
+    }
+    
     // 調用外部onReady回調
     if (onReady) {
       onReady(ytPlayer);
@@ -81,11 +92,26 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
   
   // 處理播放器狀態變化
   const handleStateChange = (event) => {
+    const isPlaying = event.data === 1;
+    const isEnded = event.data === 0;
+    
     setPlayerState(prev => ({
       ...prev,
-      playing: event.data === 1,
+      playing: isPlaying,
       duration: player ? player.getDuration() : 0,
     }));
+    
+    // 如果影片播放結束，清除播放進度
+    if (isEnded && player) {
+      const currentTime = player.getCurrentTime();
+      const duration = player.getDuration();
+      
+      // 如果播放到95%以上，認為已完成觀看
+      if (currentTime / duration > 0.95) {
+        dispatch(markVideoCompleted({ videoId }));
+        console.log('影片播放完成，已清除播放進度');
+      }
+    }
   };
   
   // 更新當前播放時間和緩衝進度
@@ -93,22 +119,45 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     if (!player) return;
     
     const interval = setInterval(() => {
+      const currentTime = player.getCurrentTime();
+      const duration = player.getDuration();
+      const buffered = player.getVideoLoadedFraction() * duration;
+      
       setPlayerState(prev => ({
         ...prev,
-        currentTime: player.getCurrentTime(),
-        buffered: player.getVideoLoadedFraction() * player.getDuration(),
+        currentTime,
+        duration,
+        buffered,
       }));
+      
+      // 自動儲存播放進度（每10秒儲存一次，且只在播放時儲存）
+      if (playerState.playing && duration > 0 && currentTime > 5) {
+        dispatch(updateVideoProgress({
+          videoId,
+          currentTime,
+          duration
+        }));
+      }
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [player]);
+  }, [player, playerState.playing, dispatch, videoId]);
   
-  // 組件卸載時清除全螢幕模式的影響
+  // 組件卸載時清除全螢幕模式的影響並儲存播放進度
   useEffect(() => {
     return () => {
       document.body.style.overflow = '';
+      
+      // 在組件卸載時儲存最後的播放進度
+      if (player && playerState.duration > 0 && playerState.currentTime > 5) {
+        dispatch(updateVideoProgress({
+          videoId,
+          currentTime: playerState.currentTime,
+          duration: playerState.duration
+        }));
+      }
     };
-  }, []);
+  }, [player, playerState.currentTime, playerState.duration, dispatch, videoId]);
   
   // 處理鼠標移動顯示/隱藏控制項
   const handleMouseMove = () => {
@@ -216,8 +265,8 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     <Box 
       sx={{
         position: 'relative',
-        paddingTop: playerState.fullscreen ? '0' : 'auto',
-        height: playerState.fullscreen ? '100vh' : 'auto',
+        paddingTop: playerState.fullscreen ? '0' : '56.25%', // 16:9 寬高比 (9/16 * 100%)
+        height: playerState.fullscreen ? '100vh' : '0',
         width: playerState.fullscreen ? '100vw' : '100%',
         bgcolor: '#000',
         overflow: 'hidden',
@@ -272,11 +321,11 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       {/* YouTube播放器 */}
       <Box 
         sx={{
-          position: playerState.fullscreen ? 'absolute' : 'relative',
+          position: 'absolute',
           top: 0,
           left: 0,
           width: '100%',
-          height: playerState.fullscreen ? '100vh' : '100%',
+          height: '100%',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',

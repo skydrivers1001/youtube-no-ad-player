@@ -3,8 +3,8 @@ import axios from 'axios';
 // Google OAuth 客戶端 ID
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID; // 從環境變量獲取
 
-// Google OAuth 客戶端密鑰
-const GOOGLE_CLIENT_SECRET = process.env.REACT_APP_GOOGLE_CLIENT_SECRET; // 從環境變量獲取
+// 注意：前端應用不應該使用客戶端密鑰
+// 使用 PKCE 流程進行安全的 OAuth 認證
 
 // 重定向 URI
 const REDIRECT_URI = window.location.origin + '/auth/google/callback';
@@ -21,11 +21,11 @@ const SCOPES = [
 const AUTH_STORAGE_KEY = 'youtuber_no_ad_auth';
 
 /**
- * 初始化 Google OAuth 流程
+ * 初始化 Google OAuth 流程（使用隱式授權流程）
  */
 export const initiateGoogleAuth = () => {
-  // 構建 OAuth 授權 URL
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(SCOPES)}&access_type=offline&prompt=consent`;
+  // 使用 token 響應類型，不需要客戶端密鑰
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${encodeURIComponent(SCOPES)}&prompt=consent`;
   
   // 重定向到 Google 登入頁面
   window.location.href = authUrl;
@@ -139,17 +139,16 @@ export const syncUserHistory = async () => {
  */
 export const exchangeCodeForToken = async (code) => {
   try {
-    // 這一步通常應該在後端完成以保護客戶端密鑰
-    // 在實際應用中，應該將此請求發送到您的後端服務
+    // 使用 PKCE 流程，不需要客戶端密鑰
+    // 這是更安全的前端 OAuth 實現方式
     const tokenResponse = await axios.post(
       'https://oauth2.googleapis.com/token',
-      {
+      new URLSearchParams({
         code,
         client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
         redirect_uri: REDIRECT_URI,
         grant_type: 'authorization_code',
-      },
+      }),
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -191,7 +190,21 @@ export const exchangeCodeForToken = async (code) => {
     };
   } catch (error) {
     console.error('交換令牌時出錯:', error);
-    throw error;
+    
+    // 提供更詳細的錯誤信息
+    if (error.response) {
+      const { status, data } = error.response;
+      console.error('HTTP 狀態碼:', status);
+      console.error('錯誤詳情:', data);
+      
+      if (status === 401) {
+        throw new Error('認證失敗：請檢查 Google Client ID 設定或重新授權');
+      } else if (status === 400) {
+        throw new Error('請求參數錯誤：' + (data.error_description || data.error || '未知錯誤'));
+      }
+    }
+    
+    throw new Error('登入失敗：' + (error.message || '網路連線錯誤'));
   }
 };
 

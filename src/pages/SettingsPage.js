@@ -3,11 +3,15 @@ import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Switch, FormControlLabel, Slider, Select, MenuItem, FormControl, InputLabel, Divider, Button, Paper, Alert } from '@mui/material';
 import { updateSettings } from '../store/settingsSlice';
 import { syncUserPlaylists, syncUserHistory } from '../services/authService';
+import { clearAllProgress, cleanupOldProgress, selectAllProgress, selectProgressCount } from '../store/progressSlice';
 import GoogleAuthButton from '../components/auth/GoogleAuthButton';
 
 const SettingsPage = () => {
-  const settings = useSelector((state) => state.settings);
   const dispatch = useDispatch();
+  const settings = useSelector((state) => state.settings);
+  const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
+  const progressCount = useSelector(selectProgressCount);
+  const allProgress = useSelector(selectAllProgress);
 
   const handleSettingChange = (setting, value) => {
     dispatch(updateSettings({ [setting]: value }));
@@ -16,6 +20,20 @@ const SettingsPage = () => {
   const handleSaveSettings = () => {
     // 在實際應用中，這裡可能需要將設置保存到本地存儲或後端
     alert('設置已保存');
+  };
+  
+  // 處理清除所有播放進度
+  const handleClearAllProgress = () => {
+    if (window.confirm('確定要清除所有播放進度嗎？此操作無法復原。')) {
+      dispatch(clearAllProgress());
+      alert('已清除所有播放進度');
+    }
+  };
+  
+  // 處理清理舊的播放進度
+  const handleCleanupOldProgress = () => {
+    dispatch(cleanupOldProgress());
+    alert('已清理30天前的播放進度');
   };
 
   return (
@@ -187,6 +205,45 @@ const SettingsPage = () => {
                 </Alert>
               </Box>
             )}
+          </Paper>
+          
+          {/* 播放進度管理 */}
+          <Paper sx={{ p: 3, mt: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              播放進度管理
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              管理您的影片播放進度記錄
+            </Typography>
+            
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body1">
+                目前儲存了 <strong>{progressCount}</strong> 個影片的播放進度
+              </Typography>
+            </Box>
+            
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Button 
+                variant="outlined" 
+                onClick={handleCleanupOldProgress}
+                disabled={progressCount === 0}
+              >
+                清理舊進度 (30天前)
+              </Button>
+              <Button 
+                variant="outlined" 
+                color="error"
+                onClick={handleClearAllProgress}
+                disabled={progressCount === 0}
+              >
+                清除所有進度
+              </Button>
+            </Box>
+            
+            <Alert severity="info" sx={{ mt: 2 }}>
+              播放進度會自動儲存，當您重新觀看影片時會從上次停止的位置繼續播放。
+              播放超過95%的影片會自動清除進度記錄。
+            </Alert>
           </Paper>
           
           <Box sx={{ mt: 4 }}>
