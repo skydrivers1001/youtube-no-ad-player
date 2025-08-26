@@ -24,8 +24,8 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-    <title>React App</title>
-    <!-- 開發時忽略跨來源第三方腳本丟出的通用 "Script error."，避免 CRA 錯誤覆蓋層誤報。
+    <title>Youtube No AD</title>
+    <!-- 開發時忽略跨來源第三方腳本丟出的通用 "Script error.",避免 CRA 錯誤覆蓋層誤報。
          僅抑制 message 為 "Script error." 且 filename 為空的情況，不影響其他錯誤顯示。 -->
     <script>
       (function() {
@@ -81,7 +81,8 @@
     
     <!-- Service Worker 註冊 -->
     <script>
-      // 註冊 Service Worker 以支援客戶端路由
+      // 暫時禁用 Service Worker 註冊來測試頁面閃爍問題
+      /*
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js')
@@ -112,12 +113,15 @@
         
         // 監聽 Service Worker 控制權變更
         navigator.serviceWorker.addEventListener('controllerchange', function() {
-          console.log('SW controller changed, reloading page');
-          window.location.reload();
+          console.log('SW controller changed');
+          // 移除自動重新載入，避免頁面不斷刷新
+          // window.location.reload();
         });
       }
+      */
       
       // 客戶端路由恢復腳本
+      /*
       (function() {
         // 檢查是否是深層連結且頁面載入失敗
         function checkDeepLink() {
@@ -149,6 +153,7 @@
           checkDeepLink();
         }
       })();
+      */
     </script>
   </body>
 </html>

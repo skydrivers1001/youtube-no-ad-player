@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
-import { AppBar, Toolbar, Typography, Button, IconButton, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, useMediaQuery, useTheme, Menu, MenuItem, Avatar } from '@mui/material';
-import { FaHome, FaSearch, FaList, FaCog, FaBars, FaUser } from 'react-icons/fa';
+import { AppBar, Toolbar, Typography, Button, IconButton, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, useMediaQuery, useTheme, Menu, Avatar } from '@mui/material';
+import { FaHome, FaSearch, FaList, FaCog, FaBars, FaUser, FaYoutube } from 'react-icons/fa';
 import { useSelector } from 'react-redux';
 import UserProfile from '../auth/UserProfile';
 import GoogleAuthButton from '../auth/GoogleAuthButton';
@@ -84,10 +84,54 @@ const Navbar = () => {
           </IconButton>
         )}
         
-        <Typography variant="h6" component={RouterLink} to="/" sx={{ flexGrow: 1, textDecoration: 'none', color: 'inherit' }}>
-          Youtuber No AD
-        </Typography>
-        
+        <Box
+          component={RouterLink}
+          to="/"
+          sx={{
+            flexGrow: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            textDecoration: 'none',
+            color: 'inherit',
+          }}
+        >
+          <Box sx={{ display: 'inline-flex', alignItems: 'center', mr: 0.5 }}>
+            <FaYoutube color="#FF0000" size={22} />
+          </Box>
+          <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 800,
+                letterSpacing: 0.5,
+                lineHeight: 1,
+                background: 'linear-gradient(90deg, #ff6b6b 0%, #feca57 50%, #1dd1a1 100%)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+            >
+              Youtube
+            </Typography>
+            <Box
+              sx={{
+                ml: 1,
+                px: 1,
+                py: 0.2,
+                borderRadius: '10px',
+                background: 'linear-gradient(90deg, #5f27cd 0%, #54a0ff 100%)',
+                color: 'white',
+                fontWeight: 800,
+                fontSize: '0.8rem',
+                lineHeight: 1.2,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+              }}
+            >
+              No AD
+            </Box>
+          </Box>
+        </Box>
         {!isMobile && navItems.map((item) => (
           <Button
             key={item.text}

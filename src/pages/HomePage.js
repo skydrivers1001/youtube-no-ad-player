@@ -93,7 +93,7 @@ const HomePage = () => {
                 fontSize: { xs: '2.5rem', md: '3.5rem' }
               }}
             >
-              Youtuber No AD
+              Youtube No AD
             </Typography>
             <Typography 
               variant="h5" 
@@ -271,7 +271,7 @@ const HomePage = () => {
                 textShadow: '0 2px 4px rgba(0,0,0,0.3)'
               }}
             >
-              為什麼選擇 Youtuber No AD？
+              為什麼選擇 Youtube No AD？
             </Typography>
             <Typography 
               variant="subtitle1" 

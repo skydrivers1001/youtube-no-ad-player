@@ -27,18 +27,22 @@ const PlayerPage = () => {
   const handlePlayerReady = (player) => {
     // 設置預設播放速度
     player.setPlaybackRate(settings.defaultPlaybackRate);
-    
-    // 添加到最近播放和觀看歷史
-    const videoInfo = {
-      id: videoId,
-      title: videoTitle,
-      channel: channelName,
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-    };
-    
-    dispatch(addToRecentlyPlayed(videoInfo));
-    dispatch(addToWatchHistory(videoInfo));
   };
+  
+  // 當 videoId 改變時記錄觀看歷史（避免重複記錄）
+  useEffect(() => {
+    if (videoId && videoTitle) {
+      const videoInfo = {
+        id: videoId,
+        title: videoTitle,
+        channel: channelName,
+        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      };
+      
+      dispatch(addToRecentlyPlayed(videoInfo));
+      dispatch(addToWatchHistory(videoInfo));
+    }
+  }, [videoId, videoTitle, channelName, dispatch]);
   
   // 處理添加到播放清單
   const handleAddToPlaylist = (event) => {

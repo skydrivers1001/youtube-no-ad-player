@@ -1,29 +1,82 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+// 從localStorage載入觀看歷史
+const loadWatchHistoryFromStorage = () => {
+  try {
+    const savedHistory = localStorage.getItem('watchHistory');
+    return savedHistory ? JSON.parse(savedHistory) : [];
+  } catch (error) {
+    console.error('載入觀看歷史失敗:', error);
+    return [];
+  }
+};
+
+// 儲存觀看歷史到localStorage
+const saveWatchHistoryToStorage = (history) => {
+  try {
+    localStorage.setItem('watchHistory', JSON.stringify(history));
+  } catch (error) {
+    console.error('儲存觀看歷史失敗:', error);
+  }
+};
+
+// 儲存播放清單到localStorage
+const savePlaylistsToStorage = (state) => {
+  try {
+    const dataToSave = {
+      playlists: state.playlists,
+      recentlyPlayed: state.recentlyPlayed,
+    };
+    localStorage.setItem('youtuber_playlists_data', JSON.stringify(dataToSave));
+  } catch (error) {
+    console.error('儲存播放清單數據失敗:', error);
+  }
+};
+
+// 從localStorage載入播放清單數據
+const loadPlaylistsFromStorage = () => {
+  try {
+    const savedData = localStorage.getItem('youtuber_playlists_data');
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      return {
+        playlists: parsedData.playlists || [],
+        recentlyPlayed: parsedData.recentlyPlayed || [],
+      };
+    }
+  } catch (error) {
+    console.error('載入播放清單數據失敗:', error);
+  }
+  
+  // 返回預設值
+  return {
+    playlists: [
+      {
+        id: 'pl1',
+        name: '我的收藏',
+        videos: [],
+      },
+      {
+        id: 'pl2',
+        name: '學習資源',
+        videos: [],
+      },
+    ],
+    recentlyPlayed: [],
+  };
+};
+
+// 在模組載入時一次性載入數據，避免重複調用
+const playlistsData = loadPlaylistsFromStorage();
+const watchHistoryData = loadWatchHistoryFromStorage();
+
 const initialState = {
-  playlists: [
-    {
-      id: 'pl1',
-      name: '我的收藏',
-      videos: [
-        {
-          id: 'dQw4w9WgXcQ',
-          title: 'Rick Astley - Never Gonna Give You Up',
-          channel: 'Rick Astley',
-          thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
-          duration: '3:33',
-          addedAt: new Date().toISOString(),
-        },
-      ],
-    },
-    {
-      id: 'pl2',
-      name: '學習資源',
-      videos: [],
-    },
-  ],
-  recentlyPlayed: [],
-  watchHistory: [],
+  playlists: playlistsData.playlists || [],
+  recentlyPlayed: playlistsData.recentlyPlayed || [],
+  watchHistory: watchHistoryData,
+  googlePlaylists: [],
+  googleWatchHistory: [],
+  playlistVideos: {},
 };
 
 export const playlistsSlice = createSlice({
@@ -37,6 +90,7 @@ export const playlistsSlice = createSlice({
         videos: [],
       };
       state.playlists.push(newPlaylist);
+      savePlaylistsToStorage(state);
     },
     setGooglePlaylists: (state, action) => {
       // 將從 Google API 獲取的播放清單添加到現有播放清單中
@@ -56,6 +110,7 @@ export const playlistsSlice = createSlice({
       
       // 添加新的 Google 播放清單
       state.playlists.push(...googlePlaylists);
+      savePlaylistsToStorage(state);
     },
     setPlaylistVideos: (state, action) => {
       // 設置特定播放清單的影片列表
@@ -63,36 +118,55 @@ export const playlistsSlice = createSlice({
       const playlist = state.playlists.find(p => p.id === playlistId);
       if (playlist) {
         playlist.videos = videos;
+        savePlaylistsToStorage(state);
       }
     },
     setGoogleWatchHistory: (state, action) => {
-      // 設置從 Google 獲取的觀看歷史
-      state.watchHistory = action.payload.map(video => ({
+      // 將從 Google API 獲取的觀看歷史添加到現有歷史中，並標記為來自 Google
+      const googleHistory = action.payload.map(video => ({
         ...video,
-        isFromGoogle: true
+        isFromGoogle: true,
+        watchedAt: video.watchedAt || new Date().toISOString()
       }));
+      
+      // 移除之前的 Google 歷史記錄，避免重複
+      state.watchHistory = state.watchHistory.filter(video => !video.isFromGoogle);
+      
+      // 添加新的 Google 歷史記錄到前面
+      state.watchHistory.unshift(...googleHistory);
+      
+      // 限制總歷史記錄數量
+      if (state.watchHistory.length > 200) {
+        state.watchHistory = state.watchHistory.slice(0, 200);
+      }
+      
+      // 儲存到localStorage
+      saveWatchHistoryToStorage(state.watchHistory);
     },
     removePlaylist: (state, action) => {
       state.playlists = state.playlists.filter(playlist => playlist.id !== action.payload);
+      savePlaylistsToStorage(state);
     },
     renamePlaylist: (state, action) => {
       const { id, name } = action.payload;
       const playlist = state.playlists.find(p => p.id === id);
       if (playlist) {
         playlist.name = name;
+        savePlaylistsToStorage(state);
       }
     },
     addVideoToPlaylist: (state, action) => {
       const { playlistId, video } = action.payload;
       const playlist = state.playlists.find(p => p.id === playlistId);
       if (playlist) {
-        // 檢查影片是否已存在於播放清單中
-        const videoExists = playlist.videos.some(v => v.id === video.id);
-        if (!videoExists) {
+        // 檢查影片是否已存在
+        const existingVideo = playlist.videos.find(v => v.id === video.id);
+        if (!existingVideo) {
           playlist.videos.push({
             ...video,
             addedAt: new Date().toISOString(),
           });
+          savePlaylistsToStorage(state);
         }
       }
     },
@@ -101,6 +175,7 @@ export const playlistsSlice = createSlice({
       const playlist = state.playlists.find(p => p.id === playlistId);
       if (playlist) {
         playlist.videos = playlist.videos.filter(video => video.id !== videoId);
+        savePlaylistsToStorage(state);
       }
     },
     addToRecentlyPlayed: (state, action) => {
@@ -116,6 +191,7 @@ export const playlistsSlice = createSlice({
       if (state.recentlyPlayed.length > 20) {
         state.recentlyPlayed = state.recentlyPlayed.slice(0, 20);
       }
+      savePlaylistsToStorage(state);
     },
     addToWatchHistory: (state, action) => {
       const video = action.payload;
@@ -138,9 +214,23 @@ export const playlistsSlice = createSlice({
       if (state.watchHistory.length > 100) {
         state.watchHistory = state.watchHistory.slice(0, 100);
       }
+      savePlaylistsToStorage(state);
     },
-    clearWatchHistory: (state) => {
+    clearWatchHistory: (state, action) => {
+      const { isGoogleHistory } = action.payload || {};
+      if (isGoogleHistory) {
+        // 清除 Google 歷史，保留本地歷史
+        state.watchHistory = state.watchHistory.filter(video => !video.isFromGoogle);
+      } else {
+        // 清除本地歷史，保留 Google 歷史
+        state.watchHistory = state.watchHistory.filter(video => video.isFromGoogle);
+      }
+      savePlaylistsToStorage(state);
+    },
+    clearAllWatchHistory: (state) => {
+      // 清除所有觀看歷史（包括本地和 Google）
       state.watchHistory = [];
+      savePlaylistsToStorage(state);
     },
   },
 });
@@ -154,6 +244,7 @@ export const {
   addToRecentlyPlayed,
   addToWatchHistory,
   clearWatchHistory,
+  clearAllWatchHistory,
   setGooglePlaylists,
   setPlaylistVideos,
   setGoogleWatchHistory,

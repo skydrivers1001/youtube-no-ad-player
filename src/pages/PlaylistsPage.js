@@ -2,15 +2,44 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Grid, Card, CardContent, CardMedia, CardActionArea, Tabs, Tab, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert, Snackbar } from '@mui/material';
-import { FaPlus, FaTrash, FaEdit, FaSync } from 'react-icons/fa';
-import { addPlaylist, removeVideoFromPlaylist, setGooglePlaylists, setPlaylistVideos, setGoogleWatchHistory } from '../store/playlistsSlice';
+import { FaPlus, FaTrash, FaSync } from 'react-icons/fa';
+import { addPlaylist, removeVideoFromPlaylist, setGooglePlaylists, setPlaylistVideos, setGoogleWatchHistory, clearWatchHistory } from '../store/playlistsSlice';
 import { syncUserPlaylists, fetchUserPlaylists, fetchPlaylistVideos, fetchWatchHistory } from '../services/authService';
+import { keyframes } from '@emotion/react';
+
+// 流動漸層動畫與樣式（用於引人注意的按鈕）
+const flowingGradient = keyframes`
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+`;
+
+const attentionButtonSx = {
+  fontSize: '1.1rem', // 約放大 25%
+  px: 2.5,
+  py: 1.25,
+  background: 'linear-gradient(270deg, #ff6b6b, #f7d794, #1dd1a1, #54a0ff, #5f27cd)',
+  backgroundSize: '400% 400%',
+  animation: `${flowingGradient} 8s ease infinite`,
+  color: 'white',
+  boxShadow: 3,
+  border: 'none',
+  '&:hover': {
+    boxShadow: 6,
+    filter: 'brightness(1.05)'
+  }
+};
 
 const PlaylistsPage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const playlists = useSelector((state) => state.playlists.playlists);
-  const watchHistory = useSelector((state) => state.playlists.watchHistory);
+  const localWatchHistory = useSelector((state) => state.playlists.watchHistory);
+  const googleWatchHistory = useSelector((state) => state.playlists.watchHistory.filter(video => video.isFromGoogle));
+  const [showGoogleHistory, setShowGoogleHistory] = useState(false);
+  
+  // 根據當前顯示模式選擇歷史記錄
+  const watchHistory = showGoogleHistory ? googleWatchHistory : localWatchHistory;
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
   const accessToken = useSelector((state) => state.auth.accessToken);
   const [currentTab, setCurrentTab] = useState(0);
@@ -98,7 +127,7 @@ const PlaylistsPage = () => {
       
       const history = await fetchWatchHistory(accessToken);
       dispatch(setGoogleWatchHistory(history));
-      setSnackbarMessage(`已從 Google 帳號載入 ${history.length} 個觀看記錄`);
+      setSnackbarMessage(`已從 Google 帳號載入 ${history.length} 個稍後觀看影片`);
       setSnackbarOpen(true);
       setShowWatchHistory(true);
     } catch (error) {
@@ -137,18 +166,20 @@ const PlaylistsPage = () => {
                   同步到 Google
                 </Button>
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   startIcon={<FaSync />}
                   onClick={handleFetchPlaylists}
-                >
-                  載入播放清單
-                </Button>
+                  sx={attentionButtonSx}
+                 >
+                   載入播放清單
+                 </Button>
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   startIcon={<FaSync />}
                   onClick={handleFetchWatchHistory}
+                  sx={attentionButtonSx}
                 >
-                  載入觀看歷史
+                  載入 Google 稍後觀看
                 </Button>
               </>
             )}
@@ -159,12 +190,20 @@ const PlaylistsPage = () => {
             >
               新增播放清單
             </Button>
-            {watchHistory.length > 0 && (
+            {(localWatchHistory.length > 0 || googleWatchHistory.length > 0) && (
               <Button
                 variant={showWatchHistory ? "contained" : "outlined"}
                 onClick={() => setShowWatchHistory(!showWatchHistory)}
               >
                 {showWatchHistory ? "顯示播放清單" : "顯示觀看歷史"}
+              </Button>
+            )}
+            {showWatchHistory && (localWatchHistory.length > 0 || googleWatchHistory.length > 0) && (
+              <Button
+                variant={showGoogleHistory ? "contained" : "outlined"}
+                onClick={() => setShowGoogleHistory(!showGoogleHistory)}
+              >
+                {showGoogleHistory ? "本地歷史" : "Google 歷史"}
               </Button>
             )}
           </Box>
@@ -179,21 +218,64 @@ const PlaylistsPage = () => {
         {showWatchHistory ? (
           // 顯示觀看歷史
           <>
-            <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-              觀看歷史 ({watchHistory.length} 個影片)
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h5">
+                {showGoogleHistory ? 'Google 稍後觀看' : '本地觀看歷史'} ({watchHistory.length} 個影片)
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {(localWatchHistory.length > 0 && googleWatchHistory.length > 0) && (
+                  <Button
+                    variant="outlined"
+                    onClick={() => setShowGoogleHistory(!showGoogleHistory)}
+                    size="small"
+                  >
+                    {showGoogleHistory ? '顯示本地歷史' : '顯示 Google 歷史'}
+                  </Button>
+                )}
+                {watchHistory.length > 0 && (
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={() => {
+                      dispatch(clearWatchHistory({ isGoogleHistory: showGoogleHistory }));
+                      setSnackbarMessage(`已清除${showGoogleHistory ? 'Google' : '本地'}觀看歷史`);
+                      setSnackbarOpen(true);
+                    }}
+                    size="small"
+                  >
+                    清除歷史
+                  </Button>
+                )}
+              </Box>
+            </Box>
             {watchHistory.length > 0 ? (
               <Grid container spacing={3}>
                 {watchHistory.map((video) => (
                   <Grid item xs={12} sm={6} md={4} key={`${video.id}_${video.watchedAt}`}>
                     <Card>
                       <CardActionArea onClick={() => handleVideoClick(video)}>
-                        <CardMedia
-                          component="img"
-                          height="140"
-                          image={video.thumbnail}
-                          alt={video.title}
-                        />
+                        <Box sx={{ position: 'relative', paddingTop: '56.25%' }}>
+                          <CardMedia
+                            component="img"
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                            image={video.thumbnail}
+                            alt={video.title}
+                          />
+                          {video.duration && (
+                            <Box sx={{ position: 'absolute', bottom: 8, right: 8, bgcolor: 'rgba(0,0,0,0.7)', px: 1, borderRadius: 1 }}>
+                              <Typography variant="caption" color="white">
+                                {video.duration}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
                         <CardContent>
                           <Typography variant="subtitle1" component="div" noWrap>
                             {video.title}
@@ -213,15 +295,21 @@ const PlaylistsPage = () => {
             ) : (
               <Box sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="h6" color="text.secondary" gutterBottom>
-                  沒有觀看歷史記錄
+                  {showGoogleHistory ? 'Google 稍後觀看清單是空的' : '本地觀看歷史是空的'}
                 </Typography>
-                <Button
-                  variant="outlined"
-                  onClick={handleFetchWatchHistory}
-                  sx={{ mt: 2 }}
-                >
-                  載入 Google 觀看歷史
-                </Button>
+                {showGoogleHistory ? (
+                  <Button
+                    variant="outlined"
+                    onClick={handleFetchWatchHistory}
+                    sx={{ mt: 2 }}
+                  >
+                    載入 Google 稍後觀看
+                  </Button>
+                ) : (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    開始觀看影片後，歷史記錄會自動出現在這裡
+                  </Typography>
+                )}
               </Box>
             )}
           </>
@@ -268,16 +356,27 @@ const PlaylistsPage = () => {
                   <Grid item xs={12} sm={6} md={4} key={video.id}>
                     <Card>
                       <CardActionArea onClick={() => handleVideoClick(video)}>
-                        <CardMedia
-                          component="img"
-                          height="140"
-                          image={video.thumbnail}
-                          alt={video.title}
-                        />
-                        <Box sx={{ position: 'absolute', bottom: 60, right: 8, bgcolor: 'rgba(0,0,0,0.7)', px: 1, borderRadius: 1 }}>
-                          <Typography variant="caption" color="white">
-                            {video.duration}
-                          </Typography>
+                        <Box sx={{ position: 'relative', paddingTop: '56.25%' }}>
+                          <CardMedia
+                            component="img"
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                            image={video.thumbnail}
+                            alt={video.title}
+                          />
+                          {video.duration && (
+                            <Box sx={{ position: 'absolute', bottom: 8, right: 8, bgcolor: 'rgba(0,0,0,0.7)', px: 1, borderRadius: 1 }}>
+                              <Typography variant="caption" color="white">
+                                {video.duration}
+                              </Typography>
+                            </Box>
+                          )}
                         </Box>
                         <CardContent>
                           <Typography variant="subtitle1" component="div" noWrap>
@@ -285,6 +384,9 @@ const PlaylistsPage = () => {
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
                             {video.channel}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            觀看時間: {new Date(video.watchedAt).toLocaleDateString()}
                           </Typography>
                         </CardContent>
                       </CardActionArea>

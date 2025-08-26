@@ -157,10 +157,10 @@ const fallbackSearchPlaylists = (query) => {
 // 模擬搜索結果數據
 const mockVideos = [
   {
-    id: 'dQw4w9WgXcQ',
-    title: '【無廣告】Rick Astley - Never Gonna Give You Up',
-    channel: 'Rick Astley',
-    thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+    id: 'lMzb9VoAK6g',
+    title: '【無廣告】替代音樂影片',
+    channel: 'Youtube No AD',
+    thumbnail: 'https://i.ytimg.com/vi/lMzb9VoAK6g/hqdefault.jpg',
     duration: '3:32',
     views: '1.2B 次觀看',
     publishedAt: '2009-10-25'
@@ -242,7 +242,7 @@ const mockPlaylists = [
   {
     id: 'PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI',
     title: '熱門音樂影片',
-    thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+    thumbnail: 'https://i.ytimg.com/vi/lMzb9VoAK6g/hqdefault.jpg',
     videoCount: '50 部影片',
     channel: 'YouTube Music'
   },

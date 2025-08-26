@@ -58,7 +58,7 @@ export const syncUserPlaylists = async () => {
         {
           snippet: {
             title: playlist.name,
-            description: '從 Youtuber No AD 應用同步的播放清單',
+            description: '從 Youtube No AD 應用同步的播放清單',
           },
           status: {
             privacyStatus: 'private',
