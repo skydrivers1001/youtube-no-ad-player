@@ -38,6 +38,40 @@ export const playlistsSlice = createSlice({
       };
       state.playlists.push(newPlaylist);
     },
+    setGooglePlaylists: (state, action) => {
+      // 將從 Google API 獲取的播放清單添加到現有播放清單中
+      const googlePlaylists = action.payload.map(playlist => ({
+        id: `google_${playlist.id}`,
+        name: playlist.title,
+        description: playlist.description,
+        thumbnail: playlist.thumbnail,
+        videoCount: playlist.videoCount,
+        videos: [], // 初始為空，需要另外獲取影片列表
+        isGooglePlaylist: true,
+        googleId: playlist.id
+      }));
+      
+      // 移除之前的 Google 播放清單，避免重複
+      state.playlists = state.playlists.filter(p => !p.isGooglePlaylist);
+      
+      // 添加新的 Google 播放清單
+      state.playlists.push(...googlePlaylists);
+    },
+    setPlaylistVideos: (state, action) => {
+      // 設置特定播放清單的影片列表
+      const { playlistId, videos } = action.payload;
+      const playlist = state.playlists.find(p => p.id === playlistId);
+      if (playlist) {
+        playlist.videos = videos;
+      }
+    },
+    setGoogleWatchHistory: (state, action) => {
+      // 設置從 Google 獲取的觀看歷史
+      state.watchHistory = action.payload.map(video => ({
+        ...video,
+        isFromGoogle: true
+      }));
+    },
     removePlaylist: (state, action) => {
       state.playlists = state.playlists.filter(playlist => playlist.id !== action.payload);
     },
@@ -120,6 +154,9 @@ export const {
   addToRecentlyPlayed,
   addToWatchHistory,
   clearWatchHistory,
+  setGooglePlaylists,
+  setPlaylistVideos,
+  setGoogleWatchHistory,
 } = playlistsSlice.actions;
 
 export default playlistsSlice.reducer;

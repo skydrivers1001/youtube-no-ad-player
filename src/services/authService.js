@@ -279,6 +279,42 @@ export const fetchUserPlaylists = async (accessToken) => {
 };
 
 /**
+ * 獲取播放清單中的影片
+ * @param {string} accessToken - 訪問令牌
+ * @param {string} playlistId - 播放清單 ID
+ * @returns {Promise<Array>} 影片數組
+ */
+export const fetchPlaylistVideos = async (accessToken, playlistId) => {
+  try {
+    const response = await axios.get(
+      'https://www.googleapis.com/youtube/v3/playlistItems',
+      {
+        params: {
+          part: 'snippet,contentDetails',
+          playlistId: playlistId,
+          maxResults: 50,
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    return response.data.items.map((item) => ({
+      id: item.contentDetails.videoId,
+      title: item.snippet.title,
+      channel: item.snippet.videoOwnerChannelTitle || item.snippet.channelTitle,
+      thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+      duration: 'N/A', // 需要額外的 API 調用來獲取時長
+      addedAt: item.snippet.publishedAt,
+    })).filter(video => video.id); // 過濾掉已刪除的影片
+  } catch (error) {
+    console.error('獲取播放清單影片時出錯:', error);
+    throw error;
+  }
+};
+
+/**
  * 獲取用戶的觀看歷史
  * @param {string} accessToken - 訪問令牌
  * @returns {Promise<Array>} 觀看歷史數組

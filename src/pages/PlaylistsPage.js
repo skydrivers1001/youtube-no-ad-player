@@ -3,22 +3,38 @@ import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Grid, Card, CardContent, CardMedia, CardActionArea, Tabs, Tab, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert, Snackbar } from '@mui/material';
 import { FaPlus, FaTrash, FaEdit, FaSync } from 'react-icons/fa';
-import { addPlaylist, removeVideoFromPlaylist } from '../store/playlistsSlice';
-import { syncUserPlaylists, fetchUserPlaylists } from '../services/authService';
+import { addPlaylist, removeVideoFromPlaylist, setGooglePlaylists, setPlaylistVideos, setGoogleWatchHistory } from '../store/playlistsSlice';
+import { syncUserPlaylists, fetchUserPlaylists, fetchPlaylistVideos, fetchWatchHistory } from '../services/authService';
 
 const PlaylistsPage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const playlists = useSelector((state) => state.playlists.playlists);
+  const watchHistory = useSelector((state) => state.playlists.watchHistory);
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
+  const accessToken = useSelector((state) => state.auth.accessToken);
   const [currentTab, setCurrentTab] = useState(0);
+  const [showWatchHistory, setShowWatchHistory] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
 
-  const handleTabChange = (event, newValue) => {
+  const handleTabChange = async (event, newValue) => {
     setCurrentTab(newValue);
+    
+    // 如果切換到 Google 播放清單且該播放清單還沒有載入影片，則自動載入
+    const selectedPlaylist = playlists[newValue];
+    if (selectedPlaylist && selectedPlaylist.isGooglePlaylist && selectedPlaylist.videos.length === 0 && accessToken) {
+      try {
+        const videos = await fetchPlaylistVideos(accessToken, selectedPlaylist.googleId);
+        dispatch(setPlaylistVideos({ playlistId: selectedPlaylist.id, videos }));
+      } catch (error) {
+        console.error('載入播放清單影片失敗:', error);
+        setSnackbarMessage('載入播放清單影片失敗: ' + error.message);
+        setSnackbarOpen(true);
+      }
+    }
   };
 
   const handleVideoClick = (video) => {
@@ -55,11 +71,39 @@ const PlaylistsPage = () => {
   
   const handleFetchPlaylists = async () => {
     try {
-      await fetchUserPlaylists();
-      setSnackbarMessage('已從 Google 帳號載入播放清單');
+      if (!accessToken) {
+        setSnackbarMessage('請先登入 Google 帳號');
+        setSnackbarOpen(true);
+        return;
+      }
+      
+      const googlePlaylists = await fetchUserPlaylists(accessToken);
+      dispatch(setGooglePlaylists(googlePlaylists));
+      setSnackbarMessage(`已從 Google 帳號載入 ${googlePlaylists.length} 個播放清單`);
       setSnackbarOpen(true);
     } catch (error) {
+      console.error('載入播放清單失敗:', error);
       setSnackbarMessage('載入失敗: ' + error.message);
+      setSnackbarOpen(true);
+    }
+  };
+  
+  const handleFetchWatchHistory = async () => {
+    try {
+      if (!accessToken) {
+        setSnackbarMessage('請先登入 Google 帳號');
+        setSnackbarOpen(true);
+        return;
+      }
+      
+      const history = await fetchWatchHistory(accessToken);
+      dispatch(setGoogleWatchHistory(history));
+      setSnackbarMessage(`已從 Google 帳號載入 ${history.length} 個觀看記錄`);
+      setSnackbarOpen(true);
+      setShowWatchHistory(true);
+    } catch (error) {
+      console.error('載入觀看歷史失敗:', error);
+      setSnackbarMessage('載入觀看歷史失敗: ' + error.message);
       setSnackbarOpen(true);
     }
   };
@@ -82,7 +126,7 @@ const PlaylistsPage = () => {
           <Typography variant="h4" component="h1">
             我的播放清單
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             {isAuthenticated && (
               <>
                 <Button
@@ -97,7 +141,14 @@ const PlaylistsPage = () => {
                   startIcon={<FaSync />}
                   onClick={handleFetchPlaylists}
                 >
-                  從 Google 載入
+                  載入播放清單
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<FaSync />}
+                  onClick={handleFetchWatchHistory}
+                >
+                  載入觀看歷史
                 </Button>
               </>
             )}
@@ -108,6 +159,14 @@ const PlaylistsPage = () => {
             >
               新增播放清單
             </Button>
+            {watchHistory.length > 0 && (
+              <Button
+                variant={showWatchHistory ? "contained" : "outlined"}
+                onClick={() => setShowWatchHistory(!showWatchHistory)}
+              >
+                {showWatchHistory ? "顯示播放清單" : "顯示觀看歷史"}
+              </Button>
+            )}
           </Box>
         </Box>
         
@@ -117,72 +176,147 @@ const PlaylistsPage = () => {
           </Alert>
         )}
         
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-          <Tabs
-            value={currentTab}
-            onChange={handleTabChange}
-            variant="scrollable"
-            scrollButtons="auto"
-          >
-            {playlists.map((playlist, index) => (
-              <Tab key={playlist.id} label={playlist.name} />
-            ))}
-          </Tabs>
-        </Box>
-        
-        {currentPlaylist.videos && currentPlaylist.videos.length > 0 ? (
-          <Grid container spacing={3}>
-            {currentPlaylist.videos.map((video) => (
-              <Grid item xs={12} sm={6} md={4} key={video.id}>
-                <Card>
-                  <CardActionArea onClick={() => handleVideoClick(video)}>
-                    <CardMedia
-                      component="img"
-                      height="140"
-                      image={video.thumbnail}
-                      alt={video.title}
-                    />
-                    <Box sx={{ position: 'absolute', bottom: 60, right: 8, bgcolor: 'rgba(0,0,0,0.7)', px: 1, borderRadius: 1 }}>
-                      <Typography variant="caption" color="white">
-                        {video.duration}
-                      </Typography>
-                    </Box>
-                    <CardContent>
-                      <Typography variant="subtitle1" component="div" noWrap>
-                        {video.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {video.channel}
-                      </Typography>
-                    </CardContent>
-                  </CardActionArea>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
-                    <Button
-                      size="small"
-                      startIcon={<FaTrash />}
-                      onClick={(e) => handleRemoveVideo(currentPlaylist.id, video.id, e)}
-                      color="error"
-                    >
-                      移除
-                    </Button>
-                  </Box>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        ) : (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              這個播放清單還沒有影片
+        {showWatchHistory ? (
+          // 顯示觀看歷史
+          <>
+            <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
+              觀看歷史 ({watchHistory.length} 個影片)
             </Typography>
-            <Button
-              variant="outlined"
-              onClick={() => navigate('/search')}
-              sx={{ mt: 2 }}
-            >
-              搜尋影片並添加
-            </Button>
-          </Box>
+            {watchHistory.length > 0 ? (
+              <Grid container spacing={3}>
+                {watchHistory.map((video) => (
+                  <Grid item xs={12} sm={6} md={4} key={`${video.id}_${video.watchedAt}`}>
+                    <Card>
+                      <CardActionArea onClick={() => handleVideoClick(video)}>
+                        <CardMedia
+                          component="img"
+                          height="140"
+                          image={video.thumbnail}
+                          alt={video.title}
+                        />
+                        <CardContent>
+                          <Typography variant="subtitle1" component="div" noWrap>
+                            {video.title}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {video.channel}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            觀看時間: {new Date(video.watchedAt).toLocaleDateString()}
+                          </Typography>
+                        </CardContent>
+                      </CardActionArea>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+            ) : (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  沒有觀看歷史記錄
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={handleFetchWatchHistory}
+                  sx={{ mt: 2 }}
+                >
+                  載入 Google 觀看歷史
+                </Button>
+              </Box>
+            )}
+          </>
+        ) : (
+          // 顯示播放清單
+          <>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+              <Tabs
+                value={currentTab}
+                onChange={handleTabChange}
+                variant="scrollable"
+                scrollButtons="auto"
+              >
+                {playlists.map((playlist, index) => (
+                  <Tab 
+                    key={playlist.id} 
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {playlist.name}
+                        {playlist.isGooglePlaylist && (
+                          <Box 
+                            sx={{ 
+                              bgcolor: 'primary.main', 
+                              color: 'white', 
+                              px: 1, 
+                              py: 0.25, 
+                              borderRadius: 1, 
+                              fontSize: '0.75rem' 
+                            }}
+                          >
+                            Google
+                          </Box>
+                        )}
+                      </Box>
+                    } 
+                  />
+                ))}
+              </Tabs>
+            </Box>
+            
+            {currentPlaylist.videos && currentPlaylist.videos.length > 0 ? (
+              <Grid container spacing={3}>
+                {currentPlaylist.videos.map((video) => (
+                  <Grid item xs={12} sm={6} md={4} key={video.id}>
+                    <Card>
+                      <CardActionArea onClick={() => handleVideoClick(video)}>
+                        <CardMedia
+                          component="img"
+                          height="140"
+                          image={video.thumbnail}
+                          alt={video.title}
+                        />
+                        <Box sx={{ position: 'absolute', bottom: 60, right: 8, bgcolor: 'rgba(0,0,0,0.7)', px: 1, borderRadius: 1 }}>
+                          <Typography variant="caption" color="white">
+                            {video.duration}
+                          </Typography>
+                        </Box>
+                        <CardContent>
+                          <Typography variant="subtitle1" component="div" noWrap>
+                            {video.title}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {video.channel}
+                          </Typography>
+                        </CardContent>
+                      </CardActionArea>
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
+                        <Button
+                          size="small"
+                          startIcon={<FaTrash />}
+                          onClick={(e) => handleRemoveVideo(currentPlaylist.id, video.id, e)}
+                          color="error"
+                        >
+                          移除
+                        </Button>
+                      </Box>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+            ) : (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  這個播放清單還沒有影片
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate('/search')}
+                  sx={{ mt: 2 }}
+                >
+                  搜尋影片並添加
+                </Button>
+              </Box>
+            )}
+          </>
         )}
       </Box>
       
