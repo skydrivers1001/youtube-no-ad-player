@@ -27,9 +27,15 @@ const GoogleAuthButton = ({ variant = 'contained', fullWidth = false }) => {
       onClick={handleGoogleLogin}
       disabled={loading}
       sx={{
-        py: 1,
+        px: { xs: 1.25, sm: 2.5 },
+        py: { xs: 0.5, sm: 1 },
+        fontSize: { xs: '0.8125rem', sm: '0.875rem' },
+        lineHeight: 1.6,
         backgroundColor: '#4285F4',
         color: '#fff',
+        '& .MuiButton-startIcon > *:nth-of-type(1)': {
+          fontSize: { xs: 16, sm: 18 },
+        },
         '&:hover': {
           backgroundColor: '#357ae8',
         },
