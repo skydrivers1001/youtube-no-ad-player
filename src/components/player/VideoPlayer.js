@@ -184,13 +184,13 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       
       setPlayerState(prev => {
         // 註解掉頻繁的 Redux 更新
-        // if (prev.playing && duration > 0 && currentTime > 5) {
-        //   dispatch(updateVideoProgress({
-        //     videoId,
-        //     currentTime,
-        //     duration
-        //   }));
-        // }
+        if (prev.playing && duration > 0 && currentTime > 5) {
+          dispatch(updateVideoProgress({
+            videoId,
+            currentTime,
+            duration
+          }));
+        }
         
         return {
           ...prev,
@@ -445,7 +445,8 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
             <Slider
               value={playerState.currentTime}
               max={playerState.duration}
-              onChange={handleSeek}
+              onChange={(event, newValue) => setPlayerState(prev => ({ ...prev, currentTime: newValue }))}
+              onChangeCommitted={handleSeek}
               aria-label="播放進度"
               sx={{
                 '& .MuiSlider-track': { bgcolor: 'primary.main' },
