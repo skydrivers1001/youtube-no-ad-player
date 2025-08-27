@@ -62,3 +62,39 @@ This document records known bugs and their resolutions for future reference.
 - Fix:
 - Validation:
 - Follow-ups:
+
+---
+
+## BUG-002: formatDuration function error
+
+- Status: Fixed
+- Affected route(s): All routes displaying video durations
+- Affected component(s): `src/services/youtubeService.js`
+
+### Symptoms
+- "API Error! Status: Unknown Message: Cannot read properties of null (reading '1') Fallback to mock data" message displayed on the page.
+- Video durations were not displayed correctly or caused errors.
+
+### Root Cause
+- The `formatDuration` function in `youtubeService.js` did not handle cases where the `isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)` regular expression returned `null`.
+- Directly accessing `match[1]` when `match` was `null` led to the `Cannot read properties of null (reading '1')` error.
+
+### Investigation Notes
+- Reviewed the `formatDuration` function and identified the lack of null checks for the regex match result.
+- Confirmed that `isoDuration` values could sometimes lead to no match.
+
+### Fix Implemented
+- Added a check for `isoDuration` being a valid string before attempting regex matching.
+- Added a null check for the `match` variable after the regex execution.
+- If `match` is null or `isoDuration` is invalid, the function now returns `'0:00'` to prevent errors.
+- Removed all temporary debug code (console logs, UI hints) added during the debugging process.
+
+### Validation
+- The "API Error!" message no longer appears on the page.
+- Video durations are displayed correctly without errors.
+- The application functions as expected after the fix.
+
+### Future Hardening / Recommendations
+- Implement more robust input validation for `isoDuration`.
+- Consider using a dedicated library for ISO 8601 duration parsing if complex duration formats are expected.
+- Add unit tests for `formatDuration` to cover edge cases, including invalid input and non-matching ISO durations.

@@ -25,6 +25,7 @@ import youtubeService from '../services/youtubeService';
 const SearchPage = () => {
   const navigate = useNavigate();
   const settings = useSelector((state) => state.settings);
+  const accessToken = useSelector((state) => state.auth.accessToken);
   
   // 搜索狀態
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,21 +44,31 @@ const SearchPage = () => {
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     
+    console.log('開始搜尋:', { searchQuery, searchType, filters });
     setLoading(true);
     try {
       let results;
       
       switch (searchType) {
         case 'videos':
-          results = await youtubeService.searchVideos(searchQuery, filters);
+          console.log('調用 searchVideos');
+          console.log('使用 accessToken:', !!accessToken);
+          results = await youtubeService.searchVideos(searchQuery, filters, accessToken);
+          console.log('searchVideos 結果:', results);
           setSearchResults(results.data.items);
           break;
         case 'channels':
-          results = await youtubeService.searchChannels(searchQuery);
+          console.log('調用 searchChannels');
+          console.log('使用 accessToken:', !!accessToken);
+          results = await youtubeService.searchChannels(searchQuery, accessToken);
+          console.log('searchChannels 結果:', results);
           setSearchResults(results.data.items);
           break;
         case 'playlists':
-          results = await youtubeService.searchPlaylists(searchQuery);
+          console.log('調用 searchPlaylists');
+          console.log('使用 accessToken:', !!accessToken);
+          results = await youtubeService.searchPlaylists(searchQuery, accessToken);
+          console.log('searchPlaylists 結果:', results);
           setSearchResults(results.data.items);
           break;
         default:

@@ -7,6 +7,27 @@ import axios from 'axios';
 // 從環境變量中獲取 API 密鑰
 const API_KEY = process.env.REACT_APP_YOUTUBE_API_KEY;
 
+// 調試：檢查 API 金鑰是否正確載入
+console.log('🔑 YouTube API Key loaded:', API_KEY ? 'Yes' : 'No');
+console.log('🔑 API Key length:', API_KEY ? API_KEY.length : 0);
+console.log('🔑 API Key value:', API_KEY ? `${API_KEY.substring(0, 10)}...` : 'undefined');
+console.log('🔑 Environment check:', {
+  NODE_ENV: process.env.NODE_ENV,
+  REACT_APP_YOUTUBE_API_KEY_exists: !!process.env.REACT_APP_YOUTUBE_API_KEY,
+  REACT_APP_YOUTUBE_API_KEY_value: process.env.REACT_APP_YOUTUBE_API_KEY ? `${process.env.REACT_APP_YOUTUBE_API_KEY.substring(0, 10)}...` : 'undefined'
+});
+
+// 在全域範圍內暴露調試函數
+window.debugYouTubeAPI = () => {
+  console.log('🔍 Manual API Debug Check:');
+  console.log('🔑 API_KEY:', API_KEY ? `${API_KEY.substring(0, 10)}...` : 'undefined');
+  console.log('🔑 process.env.REACT_APP_YOUTUBE_API_KEY:', process.env.REACT_APP_YOUTUBE_API_KEY ? `${process.env.REACT_APP_YOUTUBE_API_KEY.substring(0, 10)}...` : 'undefined');
+  console.log('🔑 All environment variables starting with REACT_APP_:', Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')));
+};
+
+// 立即執行一次調試檢查
+window.debugYouTubeAPI();
+
 // 獲取授權標頭
 const getAuthHeaders = (accessToken) => {
   return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
@@ -17,7 +38,20 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // 格式化 ISO 8601 時長為可讀格式 (PT1H2M3S -> 1:02:03)
 const formatDuration = (isoDuration) => {
+  // 檢查輸入是否有效
+  if (!isoDuration || typeof isoDuration !== 'string') {
+    console.warn('Invalid duration format:', isoDuration);
+    return '0:00';
+  }
+  
   const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  
+  // 檢查正則表達式是否匹配成功
+  if (!match) {
+    console.warn('Duration regex match failed for:', isoDuration);
+    return '0:00';
+  }
+  
   const hours = match[1] ? parseInt(match[1]) : 0;
   const minutes = match[2] ? parseInt(match[2]) : 0;
   const seconds = match[3] ? parseInt(match[3]) : 0;
@@ -266,8 +300,12 @@ const mockPlaylists = [
 const youtubeService = {
   // 搜索影片
   searchVideos: async (query, filters = {}, accessToken = null) => {
+    console.log('🔍 searchVideos called with:', { query, filters, accessToken: !!accessToken });
+    console.log('🔑 API_KEY in searchVideos:', API_KEY ? `${API_KEY.substring(0, 10)}...` : 'undefined');
+    
     try {
       if (!query) {
+        console.log('📺 Fetching popular videos...');
         // 如果沒有查詢，返回熱門影片
         const response = await axios.get(
           `https://www.googleapis.com/youtube/v3/videos`, {
@@ -276,11 +314,12 @@ const youtubeService = {
               chart: 'mostPopular',
               regionCode: 'TW', // 可以根據用戶所在地區調整
               maxResults: 10,
-              ...(accessToken ? {} : { key: API_KEY })
+              ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
             },
             headers: getAuthHeaders(accessToken)
           }
         );
+        console.log('✅ Popular videos API response received');
         
         // 轉換 API 響應格式以匹配應用程序期望的格式
         const formattedResults = response.data.items.map(item => ({
@@ -300,6 +339,7 @@ const youtubeService = {
         };
       }
       
+      console.log('🔍 Searching for videos with query:', query);
       // 構建查詢參數
       const params = {
         part: 'snippet',
@@ -308,6 +348,7 @@ const youtubeService = {
         type: 'video',
         key: API_KEY
       };
+      console.log('📋 Search params:', { ...params, key: params.key ? `${params.key.substring(0, 10)}...` : 'undefined' });
       
       // 添加過濾器
       if (filters.duration === 'short') {
@@ -328,14 +369,21 @@ const youtubeService = {
         params.publishedAfter = lastMonth.toISOString();
       }
       
+      // 調試：顯示請求參數
+      console.log('YouTube API search params:', params);
+      console.log('Using access token:', !!accessToken);
+      console.log('REACT_APP_YOUTUBE_API_KEY from process.env:', process.env.REACT_APP_YOUTUBE_API_KEY ? process.env.REACT_APP_YOUTUBE_API_KEY.substring(0, 5) + '...' : 'undefined');
+      
       // 發送搜索請求
       const searchResponse = await axios.get(
         'https://www.googleapis.com/youtube/v3/search',
         { 
-          params: accessToken ? { ...params, key: undefined } : params,
+          params: (accessToken && typeof accessToken === 'string' && accessToken.trim()) ? { ...params, key: undefined } : params,
           headers: getAuthHeaders(accessToken)
         }
       );
+      
+      console.log('YouTube API search response:', searchResponse.data);
       
       // 獲取影片 ID 列表
       const videoIds = searchResponse.data.items.map(item => item.id.videoId).join(',');
@@ -347,7 +395,7 @@ const youtubeService = {
           params: {
             part: 'snippet,contentDetails,statistics',
             id: videoIds,
-            ...(accessToken ? {} : { key: API_KEY })
+            ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
           },
           headers: getAuthHeaders(accessToken)
         }
@@ -371,6 +419,24 @@ const youtubeService = {
       };
     } catch (error) {
       console.error('YouTube API 搜索錯誤:', error);
+      console.error('錯誤詳情:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        config: {
+          url: error.config?.url,
+          params: error.config?.params,
+          headers: error.config?.headers
+        }
+      });
+      
+      // 檢查是否是 API 金鑰問題
+      if (error.response?.status === 403) {
+        console.error('API 金鑰可能無效或已達到配額限制');
+      } else if (error.response?.status === 400) {
+        console.error('請求參數可能有誤');
+      }
       
       // 如果 API 調用失敗，回退到模擬數據
       console.warn('回退到模擬數據');
@@ -390,7 +456,7 @@ const youtubeService = {
               maxResults: 10,
               chart: 'mostPopular',
               regionCode: 'TW',
-              ...(accessToken ? {} : { key: API_KEY })
+              ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
             },
             headers: getAuthHeaders(accessToken)
           }
@@ -421,7 +487,7 @@ const youtubeService = {
             maxResults: 10,
             q: query,
             type: 'channel',
-            ...(accessToken ? {} : { key: API_KEY })
+            ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
           },
           headers: getAuthHeaders(accessToken)
         }
@@ -437,7 +503,7 @@ const youtubeService = {
           params: {
             part: 'snippet,statistics',
             id: channelIds,
-            ...(accessToken ? {} : { key: API_KEY })
+            ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
           },
           headers: getAuthHeaders(accessToken)
         }
@@ -478,7 +544,7 @@ const youtubeService = {
               maxResults: 10,
               chart: 'mostPopular',
               regionCode: 'TW',
-              ...(accessToken ? {} : { key: API_KEY })
+              ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
             },
             headers: getAuthHeaders(accessToken)
           }
@@ -509,7 +575,7 @@ const youtubeService = {
             maxResults: 10,
             q: query,
             type: 'playlist',
-            ...(accessToken ? {} : { key: API_KEY })
+            ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
           },
           headers: getAuthHeaders(accessToken)
         }
@@ -525,7 +591,7 @@ const youtubeService = {
           params: {
             part: 'snippet,contentDetails',
             id: playlistIds,
-            ...(accessToken ? {} : { key: API_KEY })
+            ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
           },
           headers: getAuthHeaders(accessToken)
         }
