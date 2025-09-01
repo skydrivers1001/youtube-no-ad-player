@@ -10,7 +10,8 @@ import {
   FaVolumeMute,
   FaForward,
   FaBackward,
-  FaExternalLinkAlt
+  FaExternalLinkAlt,
+  FaClosedCaptioning
 } from 'react-icons/fa';
 import YouTube from 'react-youtube';
 import usePictureInPicture from '../../hooks/usePictureInPicture';
@@ -33,6 +34,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     duration: 0,
     buffered: 0,
     focusMode: false,
+    subtitlesEnabled: settings.defaultSubtitlesEnabled || true,
   });
   
   const [showControls, setShowControls] = useState(true);
@@ -305,6 +307,30 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     setPlayerState(prev => ({ ...prev, focusMode: !prev.focusMode }));
   };
   
+  const toggleSubtitles = () => {
+    if (!player) return;
+    
+    const newSubtitlesState = !playerState.subtitlesEnabled;
+    setPlayerState(prev => ({ ...prev, subtitlesEnabled: newSubtitlesState }));
+    
+    // 控制 YouTube 播放器的字幕顯示
+    try {
+      if (newSubtitlesState) {
+        // 開啟字幕 - 設定字幕語言
+        const language = settings.defaultSubtitleLanguage === 'auto' ? 'zh-TW' : settings.defaultSubtitleLanguage;
+        if (language !== 'none') {
+          player.setOption('captions', 'reload', true);
+          player.setOption('captions', 'displaySettings', { 'background': 'black' });
+        }
+      } else {
+        // 關閉字幕
+        player.unloadModule('captions');
+      }
+    } catch (error) {
+      console.log('字幕控制錯誤:', error);
+    }
+  };
+  
   const handleSeek = (event, newValue) => {
     player.seekTo(newValue);
     setPlayerState(prev => ({ ...prev, currentTime: newValue }));
@@ -428,7 +454,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
           onTouchStart={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
         >
-          <Box sx={{ mb: 1, position: 'relative' }}>
+          <Box sx={{ mb: 1, position: 'relative', height: '20px' }}>
             <Slider
               value={playerState.buffered}
               max={playerState.duration}
@@ -436,9 +462,20 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
               sx={{
                 position: 'absolute',
                 top: 0,
-                '& .MuiSlider-track': { bgcolor: 'rgba(255,255,255,0.3)' },
-                '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.1)' },
+                left: 0,
+                right: 0,
+                height: '4px',
+                '& .MuiSlider-track': { bgcolor: 'rgba(255,255,255,0.3)', height: '4px' },
+                '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.1)', height: '4px' },
                 '& .MuiSlider-thumb': { display: 'none' },
+                // 修復 iPhone 設備上的顯示問題
+                '@media (max-width: 768px)': {
+                  position: 'relative',
+                  transform: 'none',
+                  '& .MuiSlider-root': {
+                    transform: 'none !important',
+                  },
+                },
               }}
             />
             
@@ -449,9 +486,27 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
               onChangeCommitted={handleSeek}
               aria-label="播放進度"
               sx={{
-                '& .MuiSlider-track': { bgcolor: 'primary.main' },
-                '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.2)' },
-                '& .MuiSlider-thumb': { width: 12, height: 12, '&:hover': { width: 14, height: 14 } },
+                position: 'relative',
+                height: '4px',
+                '& .MuiSlider-track': { bgcolor: 'primary.main', height: '4px' },
+                '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.2)', height: '4px' },
+                '& .MuiSlider-thumb': { 
+                  width: 12, 
+                  height: 12, 
+                  '&:hover': { width: 14, height: 14 },
+                  // 確保滑塊在移動設備上正確顯示
+                  '@media (max-width: 768px)': {
+                    width: 16,
+                    height: 16,
+                    '&:hover': { width: 18, height: 18 },
+                  },
+                },
+                // 修復 iPhone 設備上的顯示問題
+                '@media (max-width: 768px)': {
+                  '& .MuiSlider-root': {
+                    transform: 'none !important',
+                  },
+                },
               }}
             />
           </Box>
@@ -513,6 +568,20 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
                   </Tooltip>
                 ))}
               </Box>
+              
+              <Tooltip title={playerState.subtitlesEnabled ? "關閉字幕" : "開啟字幕"}>
+                <IconButton 
+                  onClick={toggleSubtitles} 
+                  sx={{ 
+                    color: playerState.subtitlesEnabled ? 'primary.main' : 'white',
+                    '&:hover': {
+                      color: playerState.subtitlesEnabled ? 'primary.light' : 'grey.300'
+                    }
+                  }}
+                >
+                  <FaClosedCaptioning />
+                </IconButton>
+              </Tooltip>
               
               {isPipSupported && settings.pictureInPictureEnabled && (
                 <Tooltip title="畫中畫模式">

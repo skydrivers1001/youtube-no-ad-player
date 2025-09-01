@@ -4,6 +4,7 @@ const initialState = {
   darkMode: false,
   defaultPlaybackRate: 1,
   defaultSubtitleLanguage: 'auto',
+  defaultSubtitlesEnabled: true, // 預設開啟字幕
   autoplayVideos: true,
   enableBackgroundPlay: true,
   enablePictureInPicture: true,
@@ -23,6 +24,9 @@ export const settingsSlice = createSlice({
     },
     setDefaultSubtitleLanguage: (state, action) => {
       state.defaultSubtitleLanguage = action.payload;
+    },
+    toggleDefaultSubtitles: (state) => {
+      state.defaultSubtitlesEnabled = !state.defaultSubtitlesEnabled;
     },
     toggleAutoplayVideos: (state) => {
       state.autoplayVideos = !state.autoplayVideos;
@@ -49,6 +53,7 @@ export const {
   toggleDarkMode,
   setDefaultPlaybackRate,
   setDefaultSubtitleLanguage,
+  toggleDefaultSubtitles,
   toggleAutoplayVideos,
   toggleBackgroundPlay,
   togglePictureInPicture,
