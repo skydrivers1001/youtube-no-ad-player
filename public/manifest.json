@@ -1,11 +1,16 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "YouTube No AD",
+  "name": "YouTube No AD Player",
   "icons": [
     {
       "src": "favicon.ico",
       "sizes": "64x64 32x32 24x24 16x16",
       "type": "image/x-icon"
+    },
+    {
+      "src": "apple-touch-icon-120x120.png",
+      "type": "image/png",
+      "sizes": "120x120"
     },
     {
       "src": "logo192.png",
