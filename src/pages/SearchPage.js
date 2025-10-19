@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { 
@@ -17,15 +17,20 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  IconButton,
+  Tooltip
 } from '@mui/material';
-import { FaSearch } from 'react-icons/fa';
+import { FaSearch, FaYoutube, FaList } from 'react-icons/fa';
 import youtubeService from '../services/youtubeService';
+import YouTubeOfficialPage from './YouTubeOfficialPage';
 
 const SearchPage = () => {
   const navigate = useNavigate();
-  const settings = useSelector((state) => state.settings);
   const accessToken = useSelector((state) => state.auth.accessToken);
+  
+  // 模式切換狀態 - true為YouTube官方模式，false為自定義搜尋模式
+  const [isOfficialMode, setIsOfficialMode] = useState(true);
   
   // 搜索狀態
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,10 +149,7 @@ const SearchPage = () => {
             <Typography variant="body1" sx={{ mt: 2 }}>
               您可以搜尋影片、頻道或播放清單，並使用過濾器縮小結果範圍
             </Typography>
-            <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-              注意：此應用使用 YouTube Data API v3。您需要在 src/services/youtubeService.js 中設置有效的 API 密鑰才能進行實際搜尋。
-              如果未設置 API 密鑰，將使用模擬數據。
-            </Typography>
+
           </Box>
         );
       }
@@ -290,62 +292,237 @@ const SearchPage = () => {
     );
   };
   
-  return (
-    <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Typography variant="h4" gutterBottom align="center">
-        搜尋影片
-      </Typography>
-      
-      {/* 搜索類型選擇 */}
-      <Tabs
-        value={searchType}
-        onChange={(e, newValue) => setSearchType(newValue)}
-        centered
-        sx={{ mb: 3 }}
+  // 如果是YouTube官方模式，直接渲染YouTubeOfficialPage
+  if (isOfficialMode) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          py: 8,
+          position: 'relative',
+          overflow: 'hidden',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%)',
+            pointerEvents: 'none',
+          },
+        }}
       >
+        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
+        {/* 右上角切換按鈕 */}
+        <Box sx={{ position: 'absolute', top: 16, right: 16, zIndex: 1000 }}>
+          <Tooltip title="切換進階模式">
+            <IconButton
+              onClick={() => setIsOfficialMode(false)}
+              sx={{
+                backgroundColor: 'primary.main',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'primary.dark',
+                },
+                boxShadow: 2
+              }}
+            >
+              <FaList />
+            </IconButton>
+          </Tooltip>
+        </Box>
+          <YouTubeOfficialPage />
+        </Container>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        py: 8,
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%)',
+          pointerEvents: 'none',
+        },
+      }}
+    >
+      <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
+      {/* 右上角切換按鈕 */}
+      <Box sx={{ position: 'absolute', top: 16, right: 16, zIndex: 1000 }}>
+        <Tooltip title="切換到YouTube官方模式">
+          <IconButton
+            onClick={() => setIsOfficialMode(true)}
+            sx={{
+              backgroundColor: 'error.main',
+              color: 'white',
+              '&:hover': {
+                backgroundColor: 'error.dark',
+              },
+              boxShadow: 2
+            }}
+          >
+            <FaYoutube />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      
+        <Typography 
+          variant="h4" 
+          gutterBottom 
+          align="center"
+          sx={{
+            color: 'white',
+            fontWeight: 700,
+            textShadow: '0 2px 4px rgba(0,0,0,0.3)',
+            mb: 4
+          }}
+        >
+          進階搜尋
+        </Typography>
+      
+        {/* 搜索類型選擇 */}
+        <Tabs
+          value={searchType}
+          onChange={(e, newValue) => setSearchType(newValue)}
+          centered
+          sx={{ 
+            mb: 3,
+            '& .MuiTab-root': {
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontWeight: 600,
+            },
+            '& .Mui-selected': {
+              color: 'white !important',
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: 'white',
+            }
+          }}
+        >
         <Tab value="videos" label="影片" />
         <Tab value="channels" label="頻道" />
         <Tab value="playlists" label="播放清單" />
       </Tabs>
       
-      {/* 搜索欄 */}
-      <Box sx={{ display: 'flex', mb: 3 }}>
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="搜尋..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyPress={handleKeyPress}
-          sx={{ mr: 1 }}
-        />
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleSearch}
-          startIcon={<FaSearch />}
-        >
-          搜尋
-        </Button>
-      </Box>
+        {/* 搜索欄 */}
+        <Box sx={{ display: 'flex', mb: 3 }}>
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="搜尋..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyPress={handleKeyPress}
+            sx={{ 
+              mr: 1,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                '& fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.5)',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'white',
+                },
+              }
+            }}
+          />
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleSearch}
+            startIcon={<FaSearch />}
+            sx={{
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              color: 'white',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.3)',
+              }
+            }}
+          >
+            搜尋
+          </Button>
+        </Box>
       
-      {/* 過濾器 - 僅在影片搜索時顯示 */}
-      {searchType === 'videos' && (
-        <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel>影片長度</InputLabel>
-            <Select
-              value={filters.duration}
-              label="影片長度"
-              onChange={(e) => handleFilterChange('duration', e.target.value)}
+        {/* 過濾器 - 僅在影片搜索時顯示 */}
+        {searchType === 'videos' && (
+          <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <FormControl 
+              sx={{ 
+                minWidth: 120,
+                '& .MuiInputLabel-root': {
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  '&.Mui-focused': {
+                    color: 'white',
+                  }
+                },
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  '& fieldset': {
+                    borderColor: 'rgba(255, 255, 255, 0.3)',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'rgba(255, 255, 255, 0.5)',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: 'white',
+                  },
+                }
+              }}
             >
+              <InputLabel>影片長度</InputLabel>
+              <Select
+                value={filters.duration}
+                label="影片長度"
+                onChange={(e) => handleFilterChange('duration', e.target.value)}
+              >
               <MenuItem value="any">任意長度</MenuItem>
               <MenuItem value="short">短片 (&lt; 4分鐘)</MenuItem>
               <MenuItem value="long">長片 (≥ 4分鐘)</MenuItem>
             </Select>
           </FormControl>
           
-          <FormControl sx={{ minWidth: 120 }}>
+            <FormControl 
+            sx={{ 
+              minWidth: 120,
+              '& .MuiInputLabel-root': {
+                color: 'rgba(255, 255, 255, 0.7)',
+                '&.Mui-focused': {
+                  color: 'white',
+                }
+              },
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                color: 'white',
+                '& fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.5)',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'white',
+                },
+              }
+            }}
+          >
             <InputLabel>上傳時間</InputLabel>
             <Select
               value={filters.uploadDate}
@@ -362,9 +539,10 @@ const SearchPage = () => {
         </Box>
       )}
       
-      {/* 搜索結果 */}
-      {renderSearchResults()}
-    </Container>
+        {/* 搜索結果 */}
+        {renderSearchResults()}
+      </Container>
+    </Box>
   );
 };
 

@@ -36,3 +36,249 @@ code {
   width: 100% !important;
   height: 100% !important;
 }
+
+/* 隱藏 Google CSE 上的品牌字樣（例如「Google 技術強化」「由 Google 提供技術」「Powered by Google」等） */
+.gsc-control-cse .gsc-branding,
+.gsc-control-cse .gsc-branding-text,
+.gsc-control-cse .gsc-branding-img,
+.gsc-control-cse .gcsc-branding,
+.gsc-control-cse .gcsc-branding-text,
+.gsc-control-cse .gcsc-branding-img,
+.gsc-control-cse td.gsc-branding,
+.gsc-control-cse .gcsc-find-more-on-google-root,
+.gsc-control-cse .gcsc-find-more-on-google,
+.gsc-control-cse .gcsc-more-maybe-branding,
+.gsc-control-cse .gsc-adBlockInvisible + .gcsc-branding,
+.gsc-control-cse .gsc-result-info-container + .gcsc-branding {
+  display: none !important;
+}
+
+/* Google CSE 結果卡片：16:9 與響應式 1/2/3 欄 */
+#gcse-results .gsc-results, 
+#gcse-results .gsc-resultsbox-visible,
+#gcse-results .gsc-webResult, 
+#gcse-results .gsc-result {
+  box-sizing: border-box;
+}
+
+/* 結果區改為 Grid 佈局 */
+#gcse-results .gsc-expansionArea {
+  display: grid !important;
+  grid-template-columns: 1fr; /* 手機：1 欄 */
+  gap: 16px;
+}
+
+@media (min-width: 600px) {
+  /* 平板/一般桌機：2 欄 */
+  #gcse-results .gsc-expansionArea {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  /* 寬桌機：3 欄 */
+  #gcse-results .gsc-expansionArea {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* 每個結果卡片基礎樣式 */
+#gcse-results .gsc-webResult.gsc-result {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 0; /* 我們改為卡片式布局，內距交由下方內容區控制 */
+}
+
+/* 移除表格式布局，改為直向排列（縮圖在上，文字在下）*/
+#gcse-results .gsc-webResult.gsc-result .gsc-table-result {
+  display: block !important;
+  width: 100% !important;
+}
+#gcse-results .gsc-webResult.gsc-result .gsc-table-cell-thumbnail,
+#gcse-results .gsc-webResult.gsc-result .gsc-table-cell-snippet {
+  display: block !important;
+  width: 100% !important;
+}
+
+/* 縮圖區 16:9 容器 */
+#gcse-results .gsc-webResult.gsc-result .gsc-thumbnail-inside,
+#gcse-results .gsc-webResult.gsc-result .gs-image-box {
+  position: relative !important;
+  width: 100% !important;
+  height: 0 !important;
+  padding-top: 56.25% !important; /* 16:9 */
+  overflow: hidden !important;
+  background: #000; /* 沒縮圖時也保持比例 */
+}
+
+/* 縮圖圖片填滿 16:9 容器 */
+#gcse-results .gsc-webResult.gsc-result .gsc-thumbnail-inside img,
+#gcse-results .gsc-webResult.gsc-result .gs-image,
+#gcse-results .gsc-webResult.gsc-result .gs-image img {
+  position: absolute !important;
+  top: 0; left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+/* 文字內容區塊（標題、描述等）*/
+#gcse-results .gsc-webResult.gsc-result .gsc-url-top,
+#gcse-results .gsc-webResult.gsc-result .gsc-thumbnail-right,
+#gcse-results .gsc-webResult.gsc-result .gsc-thumbnail-left {
+  display: none !important; /* 避免舊有橫向縮圖列干擾 */
+}
+
+#gcse-results .gsc-webResult.gsc-result .gsc-thumbnail-inside + .gsc-url-bottom,
+#gcse-results .gsc-webResult.gsc-result .gsc-thumbnail-inside + .gsc-table-cell-snippet,
+#gcse-results .gsc-webResult.gsc-result .gsc-table-cell-snippet {
+  padding: 12px 14px 14px 14px !important;
+}
+
+/* 標題強調並讓整卡可點擊（維持預設連結）*/
+#gcse-results .gsc-webResult.gsc-result .gs-title, 
+#gcse-results .gsc-webResult.gsc-result .gs-title * {
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+}
+
+/* 統一卡片間距（原本結果自帶 margin，Grid 已管理間距）*/
+#gcse-results .gsc-webResult.gsc-result,
+#gcse-results .gsc-imageResult {
+  margin: 0 !important;
+}
+
+/* 調整 CSE 卡片密度與欄數（讓一列更容易放下 2~3 張）*/
+#gcse-results .gsc-expansionArea {
+  gap: 12px !important; /* 原 16px -> 12px，讓排版更緊湊 */
+}
+
+/* 更早切換到 2 欄與 3 欄 */
+@media (min-width: 480px) {
+  #gcse-results .gsc-expansionArea {
+    grid-template-columns: repeat(2, 1fr) !important; /* 480px 起就 2 欄 */
+  }
+}
+@media (min-width: 1024px) {
+  #gcse-results .gsc-expansionArea {
+    grid-template-columns: repeat(3, 1fr) !important; /* 1024px 起就 3 欄 */
+  }
+}
+
+/* 卡片內容更緊湊：降低字級、控制行高、壓縮內距 */
+#gcse-results .gsc-webResult.gsc-result .gs-title,
+#gcse-results .gsc-webResult.gsc-result .gs-title * {
+  font-size: 0.95rem !important; /* 標題稍微縮小 */
+  line-height: 1.25 !important;
+}
+
+#gcse-results .gsc-webResult.gsc-result .gsc-table-cell-snippet {
+  padding: 10px 12px 12px 12px !important; /* 文字區塊更緊湊 */
+  font-size: 0.82rem !important;
+  line-height: 1.4 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important; /* 摘要只顯示兩行 */
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+/* 移除底部網址列以節省垂直空間 */
+#gcse-results .gsc-webResult.gsc-result .gsc-url-bottom {
+  display: none !important;
+}
+
+/* 卡片 hover 略顯示層次（但不改尺寸）*/
+#gcse-results .gsc-webResult.gsc-result:hover {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+@media (min-width: 900px) {
+  /* 桌機：3 欄，更早進入三欄顯示 */
+  #gcse-results .gsc-expansionArea {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* 更寬螢幕：提高密度，維持 16:9 */
+@media (min-width: 1280px) {
+  #gcse-results .gsc-expansionArea {
+    grid-template-columns: repeat(4, 1fr) !important; /* 4 欄，卡片更小 */
+    gap: 10px !important;
+  }
+  #gcse-results .gsc-webResult.gsc-result .gs-title,
+  #gcse-results .gsc-webResult.gsc-result .gs-title * {
+    font-size: 0.9rem !important;
+  }
+  #gcse-results .gsc-webResult.gsc-result .gsc-table-cell-snippet {
+    font-size: 0.78rem !important;
+    padding: 8px 10px 10px 10px !important;
+  }
+}
+
+@media (min-width: 1600px) {
+  #gcse-results .gsc-expansionArea {
+    grid-template-columns: repeat(5, 1fr) !important; /* 5 欄，更緊湊 */
+    gap: 8px !important;
+  }
+  #gcse-results .gsc-webResult.gsc-result .gs-title,
+  #gcse-results .gsc-webResult.gsc-result .gs-title * {
+    font-size: 0.85rem !important;
+  }
+  #gcse-results .gsc-webResult.gsc-result .gsc-table-cell-snippet {
+    font-size: 0.75rem !important;
+  }
+}
+
+/* 縮小 CSE 搜尋按鈕與圖示尺寸 */
+#gcse-searchbox .gsc-search-button,
+#gcse-searchbox .gsc-search-button.gsc-search-button-v2 {
+  padding: 2px 8px !important; /* 原 6px 27px，縮小左右內距以讓圖示更貼合 */
+  height: 28px !important;       /* 原 34px -> 28px */
+  line-height: 28px !important;
+}
+
+#gcse-searchbox .gsc-search-button svg {
+  width: 16px !important;  /* 原本約 20px，改為 16px 更小更精緻 */
+  height: 16px !important;
+}
+
+/* 調整清除按鈕（x）尺寸，避免看起來比放大鏡更大 */
+#gcse-searchbox .gsc-clear-button {
+  background-size: 12px 12px !important;
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.gsc-search-button svg {
+  width: 20px !important; /* 調整為你想要的大小 */
+  height: 20px !important; /* 調整為你想要的大小 */
+}
+
+.gsc-search-button img {
+  width: 20px !important; /* 調整為你想要的大小 */
+  height: 20px !important; /* 調整為你想要的大小 */
+}
+
+/* 縮圖改為目前尺寸的一半，維持 16:9，置中顯示 */
+#gcse-results .gsc-webResult.gsc-result .gsc-thumbnail-inside,
+#gcse-results .gsc-webResult.gsc-result .gs-image-box {
+  width: 50% !important;
+  box-sizing: border-box !important;
+  margin: 0 auto !important;
+}
+
+/* 讓卡片採用直向堆疊區塊，確保 1/2 寬能置中 */
+#gcse-results .gsc-webResult.gsc-result .gsc-table-result {
+  display: block !important;
+  text-align: center !important; /* 讓內部 inline 元素也置中 */
+}
+
+/* 避免圖片被 inline 特性影響置中 */
+#gcse-results .gsc-webResult.gsc-result .gsc-thumbnail-inside img,
+#gcse-results .gsc-webResult.gsc-result .gs-image,
+#gcse-results .gsc-webResult.gsc-result .gs-image img {
+  display: block !important;
+  margin: 0 auto !important;
+}

@@ -44,11 +44,32 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
   
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   
+  // 讓整個播放器容器能進入真正的瀏覽器全螢幕
+  const containerRef = useRef(null);
+
   useEffect(() => {
     const checkTouchDevice = () => {
       return 'ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
     };
     setIsTouchDevice(checkTouchDevice());
+  }, []);
+
+  // 同步監聽 Fullscreen 變化（避免使用者透過 ESC 或系統手勢退出時狀態不同步）
+  useEffect(() => {
+    const handleFsChange = () => {
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+      const isFs = !!fsEl && (fsEl === containerRef.current || containerRef.current?.contains(fsEl));
+      setPlayerState(prev => ({ ...prev, fullscreen: isFs }));
+      document.body.style.overflow = isFs ? 'hidden' : '';
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    document.addEventListener('msfullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+      document.removeEventListener('msfullscreenchange', handleFsChange);
+    };
   }, []);
   
   const [dataUsageTracker, setDataUsageTracker] = useState({
@@ -79,6 +100,8 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       iv_load_policy: 3,
       cc_load_policy: settings.defaultSubtitlesEnabled ? 1 : 0,
       hl: settings.defaultSubtitlesLanguage || 'zh-TW',
+      // iOS/Safari 內嵌播放，避免自動切進原生全螢幕導致自訂控制列消失
+      playsinline: 1,
     },
   }), [autoplay, settings]);
 
@@ -289,10 +312,36 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     setPlayerState(prev => ({ ...prev, playbackRate: rate }));
   };
   
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     setPlayerState(prev => {
       const newFullscreenState = !prev.fullscreen;
-      
+
+      // 嘗試使用瀏覽器 Fullscreen API
+      try {
+        const el = containerRef.current;
+        if (newFullscreenState && el) {
+          if (el.requestFullscreen) {
+            el.requestFullscreen();
+          } else if (el.webkitRequestFullscreen) {
+            el.webkitRequestFullscreen();
+          } else if (el.msRequestFullscreen) {
+            el.msRequestFullscreen();
+          }
+        } else if (!newFullscreenState) {
+          if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+            if (document.exitFullscreen) {
+              document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+              document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+              document.msExitFullscreen();
+            }
+          }
+        }
+      } catch (e) {
+        console.log('Fullscreen API error:', e);
+      }
+
       if (newFullscreenState) {
         document.body.style.overflow = 'hidden';
       } else {
@@ -343,9 +392,12 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
   };
   
   const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
+    if (!Number.isFinite(seconds) || seconds < 0) return '0:00:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    const pad2 = (n) => (n < 10 ? '0' : '') + n;
+    return `${hrs}:${pad2(mins)}:${pad2(secs)}`;
   };
   
   const handleDoubleClick = (side) => {
@@ -358,6 +410,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
   
   return (
     <Box 
+      ref={containerRef}
       sx={{
         position: 'relative',
         paddingTop: playerState.fullscreen ? '0' : '56.25%',
@@ -445,10 +498,11 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
             left: 0,
             right: 0,
             p: 2,
+            pb: 'calc(16px + env(safe-area-inset-bottom))',
             background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
             transition: 'opacity 0.3s',
             opacity: showControls ? 1 : 0,
-            zIndex: playerState.fullscreen ? 10000 : 2,
+            zIndex: playerState.fullscreen ? 100000 : 2,
             pointerEvents: 'auto',
           }}
           onTouchStart={(e) => e.stopPropagation()}
