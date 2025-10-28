@@ -28,8 +28,11 @@ class ErrorBoundary extends React.Component {
       errorInfo: errorInfo
     });
 
-    // 如果是路由相關錯誤，嘗試自動恢復
-    if (this.isRoutingError(error) && this.state.retryCount < 2) {
+    // 在生產環境停用自動重試，避免持續迴圈
+    const isProdLike = typeof window !== 'undefined' && window.location && window.location.hostname !== 'localhost';
+
+    // 如果是路由相關錯誤，嘗試自動恢復（僅開發環境）
+    if (!isProdLike && this.isRoutingError(error) && this.state.retryCount < 2) {
       setTimeout(() => {
         this.handleRetry();
       }, 1000);
@@ -45,7 +48,7 @@ class ErrorBoundary extends React.Component {
       'location'
     ];
     
-    const errorMessage = error.message.toLowerCase();
+    const errorMessage = (error && error.message ? error.message : '').toLowerCase();
     return routingErrorKeywords.some(keyword => errorMessage.includes(keyword));
   }
 
