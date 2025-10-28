@@ -6,9 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script type="text/javascript">
       // GitHub Pages SPA 404 fallback
-      // 將 404 的深層路徑改寫為查詢字串，交由 index.html 解碼回正確路由
+      // 僅在 GitHub Pages 域名下啟用，避免其他主機（如 Render）產生 /?/ 汙染
       (function() {
         var l = window.location;
+        var isGithub = /github\.io$/.test(l.hostname);
+        if (!isGithub) {
+          return; // 非 GitHub Pages，直接退出
+        }
         // GitHub Pages 專案頁面通常為 /<repo>/...，保留第一段路徑
         var pathSegmentsToKeep = 1;
         var newUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/' +

@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!-- Normalize Render: strip "/?/" artifact in pathname -->
+    <script>
+      (function(l){
+        try {
+          var isRender = /onrender\.com$/.test(l.hostname);
+          var idx = l.pathname.indexOf('/?/');
+          if (isRender && idx !== -1) {
+            var normalizedPath = l.pathname.slice(0, idx) || '/';
+            var newUrl = normalizedPath + (l.hash || '');
+            try { window.history.replaceState(null, null, newUrl); } 
+            catch (e) { l.replace(newUrl); }
+          }
+        } catch (e) {}
+      })(window.location);
+    </script>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
