@@ -3,7 +3,7 @@
  * 用於處理 SPA 部署中的深層連結問題
  */
 
-import { isValidRoute, parseRouteParams, getRouteMeta } from '../config/routes';
+import { isValidRoute } from '../config/routes';
 
 /**
  * 檢查當前 URL 是否為有效的應用路由

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Box, Typography } from '@mui/material';
+import { Button, Box } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { initiateGoogleAuth } from '../../services/authService';
 import { loginStart } from '../../store/authSlice';

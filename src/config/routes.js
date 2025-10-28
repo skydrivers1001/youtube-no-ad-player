@@ -107,7 +107,7 @@ export const getRouteMeta = (pathname) => {
   }
   
   // 動態路由匹配
-  for (const [key, route] of Object.entries(DYNAMIC_ROUTES)) {
+  for (const route of Object.values(DYNAMIC_ROUTES)) {
     if (route.pattern.test(pathname)) {
       return ROUTE_META[route.template];
     }
@@ -230,7 +230,7 @@ export const navigationHelpers = {
   goSettings: () => APP_ROUTES.SETTINGS
 };
 
-export default {
+const routesConfig = {
   APP_ROUTES,
   ROUTE_PATHS,
   EXACT_ROUTES,
@@ -244,3 +244,5 @@ export default {
   getRouteTitle,
   navigationHelpers
 };
+
+export default routesConfig;

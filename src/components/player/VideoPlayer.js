@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Box, IconButton, Slider, Typography, Grid, Paper, Tooltip } from '@mui/material';
+import { Box, IconButton, Slider, Typography, Paper, Tooltip } from '@mui/material';
 import { 
   FaPlay, 
   FaPause, 
@@ -80,9 +80,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
   const dataUsageIntervalRef = useRef(null);
   
   const { 
-    videoRef, 
     isPipSupported, 
-    isPipActive, 
     togglePictureInPicture 
   } = usePictureInPicture({ 
     enabled: settings.pictureInPictureEnabled 
@@ -141,7 +139,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     //         });
     //     }
     // }, 5000);
-  }, [dispatch, dataUsageTracker.lastRecordedTime]);
+  }, []);
 
   const stopDataUsageTracking = useCallback(() => {
     if (dataUsageIntervalRef.current) {
@@ -233,15 +231,8 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     return () => {
       document.body.style.overflow = '';
       stopDataUsageTracking();
-      if (player && playerState.duration > 0 && playerState.currentTime > 5) {
-        dispatch(updateVideoProgress({
-          videoId,
-          currentTime: playerState.currentTime,
-          duration: playerState.duration
-        }));
-      }
     };
-  }, [player, playerState, videoId, dispatch, stopDataUsageTracking]);
+  }, [stopDataUsageTracking]);
   
   const handleMouseMove = () => {
     setShowControls(true);
@@ -352,10 +343,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     });
   };
   
-  const toggleFocusMode = () => {
-    setPlayerState(prev => ({ ...prev, focusMode: !prev.focusMode }));
-  };
-  
+
   const toggleSubtitles = () => {
     if (!player) return;
     

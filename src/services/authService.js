@@ -118,8 +118,8 @@ export const syncUserHistory = async () => {
     // 從 Redux 獲取本地觀看歷史
     // 注意：在實際應用中，您需要從 Redux store 獲取觀看歷史
     // 這裡僅作為示例
-    const store = window.store; // 假設您已將 store 暴露到全局
-    const history = store.getState().playlists.watchHistory;
+    // const store = window.store; // 假設您已將 store 暴露到全局
+    // const history = store.getState().playlists.watchHistory; // 未使用，移除以消除警告
 
     // 注意：YouTube API 不允許直接修改觀看歷史
     // 這裡僅作為示例，實際上可能需要使用其他方法

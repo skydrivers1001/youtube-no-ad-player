@@ -1,18 +1,6 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Box, CircularProgress, Typography } from '@mui/material';
-import { 
-  isValidAppRoute, 
-  attemptRouteRecovery, 
-  isPageLoaded, 
-  handleOAuthCallback,
-  setupRouteRecovery,
-  checkStaticAssets
-} from '../../utils/routeRecovery';
 import telemetry from '../../utils/telemetry';
-
-// Feature flag: temporarily disable route recovery to isolate flicker
-const ENABLE_ROUTE_RECOVERY = false;
 
 const RouteGuard = ({ children }) => {
   const location = useLocation();

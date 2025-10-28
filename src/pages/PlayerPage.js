@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Box, Typography, Container, IconButton, Paper, Button, Menu, MenuItem } from '@mui/material';
-import { FaList, FaPlus } from 'react-icons/fa';
+import { Box, Typography, Container, Paper, Button, Menu, MenuItem } from '@mui/material';
+import { FaPlus } from 'react-icons/fa';
 import VideoPlayer from '../components/player/VideoPlayer';
 import { addVideoToPlaylist, addToWatchHistory, addToRecentlyPlayed } from '../store/playlistsSlice';
 
@@ -23,7 +23,7 @@ const PlayerPage = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   
-  // 處理播放器就緒
+  // 處理播放器就绪
   const handlePlayerReady = (player) => {
     // 設置預設播放速度
     player.setPlaybackRate(settings.defaultPlaybackRate);

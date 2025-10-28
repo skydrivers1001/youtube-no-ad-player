@@ -93,12 +93,12 @@ const fallbackSearchVideos = (query, filters = {}) => {
   // 模擬過濾功能
   if (filters.duration === 'short') {
     filteredVideos = filteredVideos.filter(video => {
-      const [mins, secs] = video.duration.split(':').map(Number);
+      const [mins] = video.duration.split(':').map(Number);
       return mins < 4;
     });
   } else if (filters.duration === 'long') {
     filteredVideos = filteredVideos.filter(video => {
-      const [mins, secs] = video.duration.split(':').map(Number);
+      const [mins] = video.duration.split(':').map(Number);
       return mins >= 4;
     });
   }

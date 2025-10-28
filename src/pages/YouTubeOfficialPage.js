@@ -45,7 +45,7 @@ const YouTubeOfficialPage = () => {
     return (input?.value || '').trim();
   };
 
-  const fetchSitePlayable = async (q) => {
+  const fetchSitePlayable = React.useCallback(async (q) => {
     if (!q) return;
     if (q === siteQuery && siteResults.length > 0) return; // 簡單避免重複抓取
     setSiteQuery(q);
@@ -62,7 +62,7 @@ const YouTubeOfficialPage = () => {
     } finally {
       setSiteLoading(false);
     }
-  };
+  }, [siteQuery, siteResults.length, accessToken]);
 
   useEffect(() => {
     function renderCSE() {
@@ -286,7 +286,7 @@ const YouTubeOfficialPage = () => {
       // 中止結果區 observer
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     };
-  }, [navigate, accessToken]);
+  }, [navigate, accessToken, fetchSitePlayable]);
 
   const renderSiteResults = () => {
     if (siteLoading) {

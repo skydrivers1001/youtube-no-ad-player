@@ -3,15 +3,13 @@ import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Switch, FormControlLabel, Slider, Select, MenuItem, FormControl, InputLabel, Divider, Button, Paper, Alert } from '@mui/material';
 import { updateSettings } from '../store/settingsSlice';
 import { syncUserPlaylists, syncUserHistory } from '../services/authService';
-import { clearAllProgress, cleanupOldProgress, selectAllProgress, selectProgressCount } from '../store/progressSlice';
+import { clearAllProgress, cleanupOldProgress, selectProgressCount } from '../store/progressSlice';
 import GoogleAuthButton from '../components/auth/GoogleAuthButton';
 
 const SettingsPage = () => {
   const dispatch = useDispatch();
   const settings = useSelector((state) => state.settings);
-  const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
   const progressCount = useSelector(selectProgressCount);
-  const allProgress = useSelector(selectAllProgress);
 
   const handleSettingChange = (setting, value) => {
     dispatch(updateSettings({ [setting]: value }));
