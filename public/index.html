@@ -70,6 +70,22 @@
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
     <script>
+      // GitHub Pages SPA 回寫腳本：把 404 重寫過來的查詢字串還原為原始路徑
+      (function(l){
+        try {
+          if (l.search && l.search.startsWith('?/')) {
+            var decoded = l.search.slice(2).split('&').map(function(s){
+              return s.replace(/~and~/g, '&');
+            }).join('?');
+            var newPath = '/' + decoded + l.hash;
+            window.history.replaceState(null, null, newPath);
+          }
+        } catch (e) {
+          // 安全降級，不影響正常載入
+        }
+      })(window.location);
+    </script>
+    <script>
       window.__gcse = { parsetags: 'explicit' };
     </script>
     <script async src="https://cse.google.com/cse.js?cx=3753cb40a311e408b"></script>

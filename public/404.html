@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Redirecting...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script type="text/javascript">
+      // GitHub Pages SPA 404 fallback
+      // 將 404 的深層路徑改寫為查詢字串，交由 index.html 解碼回正確路由
+      (function() {
+        var l = window.location;
+        // GitHub Pages 專案頁面通常為 /<repo>/...，保留第一段路徑
+        var pathSegmentsToKeep = 1;
+        var newUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/' +
+          l.pathname.split('/').slice(1, 1 + pathSegmentsToKeep).join('/') +
+          '/?/' + l.pathname.split('/').slice(1 + pathSegmentsToKeep).join('/') +
+          (l.search ? '&' + l.search.slice(1).replace(/\+/g, '%2B') : '') + l.hash;
+        l.replace(newUrl);
+      })();
+    </script>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+      .wrap { display:flex; align-items:center; justify-content:center; height:100vh; color:#444; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">Redirecting...</div>
+  </body>
+</html>
