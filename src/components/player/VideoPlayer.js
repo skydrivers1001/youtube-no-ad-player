@@ -536,7 +536,12 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
             <Slider
               value={playerState.currentTime}
               max={playerState.duration}
-              onChange={(event, newValue) => setPlayerState(prev => ({ ...prev, currentTime: newValue }))}
+              onChange={(event, newValue) => {
+                setPlayerState(prev => ({ ...prev, currentTime: newValue }));
+                if (player && Number.isFinite(newValue)) {
+                  player.seekTo(newValue);
+                }
+              }}
               onChangeCommitted={handleSeek}
               aria-label="播放進度"
               sx={{
@@ -603,7 +608,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
             
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <Box sx={{ display: 'flex', mr: 1 }}>
-                {[0.5, 1, 1.5, 2].map(rate => (
+                {[0.5, 1, 1.25, 1.5, 2].map(rate => (
                   <Tooltip key={rate} title={`${rate}x 速度`}>
                     <Paper
                       onClick={() => setPlaybackRate(rate)}

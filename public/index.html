@@ -141,40 +141,36 @@
       }
       */
       
-      // 客戶端路由恢復腳本
-      /*
+      // 白屏保護：生產環境在深層連結重載時顯示回復選項
       (function() {
-        // 檢查是否是深層連結且頁面載入失敗
-        function checkDeepLink() {
-          const path = window.location.pathname;
-          
-          // 如果不是首頁且 DOM 載入後沒有 React 內容
-          if (path !== '/' && document.readyState === 'complete') {
+        function mountGuard() {
+          try {
+            if (location.hostname === 'localhost') return;
+            var path = location.pathname;
+            if (!path || path === '/') return;
             setTimeout(function() {
-              const root = document.getElementById('root');
-              if (root && root.children.length === 0) {
-                console.log('Deep link detected but React not loaded, attempting recovery');
-                
-                // 嘗試重新載入頁面
-                if (window.location.hash) {
-                  // 如果有 hash，保留它（OAuth 回調）
-                  window.location.href = window.location.href;
-                } else {
-                  // 否則重新載入當前頁面
-                  window.location.reload();
-                }
-              }
-            }, 2000);
+              var root = document.getElementById('root');
+              var hasApp = root && root.children && root.children.length > 0;
+              if (hasApp) return;
+              var container = document.createElement('div');
+              container.style.cssText = 'padding:24px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#fff;background:#000;';
+              container.innerHTML = '<div style="max-width:640px;margin:40px auto;"><h2 style="margin:0 0 12px;font-weight:600;">頁面載入失敗</h2><p style="margin:0 0 16px;color:#ccc;">可能是靜態主機未正確配置 SPA 重寫，或資源載入異常。</p><div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;"><button id="__goHome" style="padding:8px 14px;border-radius:8px;border:1px solid #444;background:#111;color:#fff;cursor:pointer;">回到首頁</button><button id="__reload" style="padding:8px 14px;border-radius:8px;border:1px solid #444;background:#111;color:#fff;cursor:pointer;">重新整理</button></div></div>';
+              root && root.appendChild(container);
+              var goHome = document.getElementById('__goHome');
+              var reload = document.getElementById('__reload');
+              if (goHome) goHome.onclick = function(){ window.location.href = '/'; };
+              if (reload) reload.onclick = function(){ window.location.reload(); };
+            }, 1500);
+          } catch (e) {
+            // 安全降級，不影響正常載入
           }
         }
-        
         if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', checkDeepLink);
+          document.addEventListener('DOMContentLoaded', mountGuard);
         } else {
-          checkDeepLink();
+          mountGuard();
         }
       })();
-      */
     </script>
   </body>
 </html>
