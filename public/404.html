@@ -22,6 +22,18 @@
         l.replace(newUrl);
       })();
     </script>
+    <!-- Render 靜態站：若未設定 rewrite /* -> /index.html，則使用 404 回退到 index.html 並保留原始路徑於查詢字串 -->
+    <script type="text/javascript">
+      (function() {
+        var l = window.location;
+        var isRender = /onrender\.com$/.test(l.hostname);
+        if (!isRender) return;
+        var newUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+          '/index.html?/' + l.pathname.slice(1) +
+          (l.search ? '&' + l.search.slice(1).replace(/\+/g, '%2B') : '') + l.hash;
+        l.replace(newUrl);
+      })();
+    </script>
     <style>
       body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
       .wrap { display:flex; align-items:center; justify-content:center; height:100vh; color:#444; }
