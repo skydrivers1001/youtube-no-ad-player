@@ -25,6 +25,7 @@ import RouteGuard from './components/routing/RouteGuard';
 
 // 樣式
 import './App.css';
+import DebugLogsPage from './pages/DebugLogsPage';
 
 function App() {
   // 從Redux存儲獲取深色模式設置
@@ -79,6 +80,7 @@ function App() {
                   <Route path="/playlists" element={<PlaylistsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
+                  <Route path="/debug" element={<DebugLogsPage />} />
                   {/* 404 處理 - 必須放在最後 */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
