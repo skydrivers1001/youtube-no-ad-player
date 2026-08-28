@@ -1,94 +1,162 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * 自定義鉤子，用於處理畫中畫（Picture-in-Picture）功能
- * @param {Object} options - 配置選項
- * @param {boolean} options.enabled - 是否啟用畫中畫功能
- * @returns {Object} 包含畫中畫狀態和控制方法的對象
+ * 為 YouTube iframe 提供可落地的畫中畫策略：
+ * 1. 支援 Document PiP 的瀏覽器，開啟獨立小窗播放。
+ * 2. 不支援時明確回報，交由呼叫端決定降級提示。
  */
-const usePictureInPicture = ({ enabled = true }) => {
-  const videoRef = useRef(null);
+const usePictureInPicture = ({
+  enabled = true,
+  buildEmbedUrl,
+  getCurrentTime,
+  getShouldResumePlayback,
+  onEnter,
+  onExit,
+}) => {
+  const pipWindowRef = useRef(null);
+  const sessionRef = useRef(null);
   const [isPipSupported, setIsPipSupported] = useState(false);
   const [isPipActive, setIsPipActive] = useState(false);
+  const [supportMode, setSupportMode] = useState('unsupported');
 
-  // 檢查瀏覽器是否支援畫中畫
+  const cleanupSession = useCallback((shouldResume = true) => {
+    const session = sessionRef.current;
+
+    if (session && shouldResume && onExit) {
+      const elapsedSeconds = session.wasPlaying
+        ? Math.max(0, Math.floor((Date.now() - session.startedAt) / 1000))
+        : 0;
+
+      onExit({
+        estimatedCurrentTime: session.startSeconds + elapsedSeconds,
+        resumePlaybackInSource: session.wasPlaying && getShouldResumePlayback?.() !== false,
+      });
+    }
+
+    if (pipWindowRef.current) {
+      pipWindowRef.current = null;
+    }
+
+    sessionRef.current = null;
+    setIsPipActive(false);
+  }, [getShouldResumePlayback, onExit]);
+
   useEffect(() => {
-    const checkPipSupport = () => {
-      if (document.pictureInPictureEnabled || 
-          (document.documentElement.webkitRequestPictureInPicture) ||
-          (document.documentElement.requestPictureInPicture)) {
-        setIsPipSupported(true);
-      } else {
-        setIsPipSupported(false);
-      }
-    };
+    const hasDocumentPip = typeof window !== 'undefined'
+      && !!window.documentPictureInPicture
+      && typeof window.documentPictureInPicture.requestWindow === 'function';
 
-    checkPipSupport();
-  }, []);
+    setSupportMode(hasDocumentPip ? 'document' : 'unsupported');
+    setIsPipSupported(enabled && hasDocumentPip);
+  }, [enabled]);
 
-  // 監聽畫中畫事件
   useEffect(() => {
-    if (!videoRef.current || !enabled) return;
-
-    const video = videoRef.current;
-
-    const handleEnterPip = () => {
-      setIsPipActive(true);
-    };
-
-    const handleExitPip = () => {
-      setIsPipActive(false);
-    };
-
-    video.addEventListener('enterpictureinpicture', handleEnterPip);
-    video.addEventListener('leavepictureinpicture', handleExitPip);
-
     return () => {
-      video.removeEventListener('enterpictureinpicture', handleEnterPip);
-      video.removeEventListener('leavepictureinpicture', handleExitPip);
+      cleanupSession(false);
     };
-  }, [videoRef, enabled]);
+  }, [cleanupSession]);
 
-  // 進入畫中畫模式
-  const enterPictureInPicture = async () => {
-    if (!videoRef.current || !isPipSupported || !enabled) return;
+  const enterPictureInPicture = useCallback(async ({
+    title = '畫中畫播放',
+    width = 480,
+    height = 270,
+    autoplay = true,
+  } = {}) => {
+    if (!enabled) {
+      return { ok: false, reason: 'disabled' };
+    }
+
+    if (!isPipSupported || typeof buildEmbedUrl !== 'function') {
+      return { ok: false, reason: 'unsupported' };
+    }
 
     try {
-      if (document.pictureInPictureElement !== videoRef.current) {
-        await videoRef.current.requestPictureInPicture();
-      }
+      const startSeconds = Math.max(0, Math.floor(getCurrentTime?.() || 0));
+      const pipWindow = await window.documentPictureInPicture.requestWindow({
+        width,
+        height,
+      });
+
+      const embedUrl = buildEmbedUrl({
+        autoplay,
+        startSeconds,
+      });
+
+      const handleWindowClose = () => {
+        cleanupSession(true);
+      };
+
+      pipWindow.document.title = title;
+      pipWindow.document.documentElement.style.height = '100%';
+      pipWindow.document.body.style.margin = '0';
+      pipWindow.document.body.style.height = '100%';
+      pipWindow.document.body.style.background = '#000';
+      pipWindow.document.body.style.overflow = 'hidden';
+      pipWindow.document.body.innerHTML = '';
+
+      const iframe = pipWindow.document.createElement('iframe');
+      iframe.src = embedUrl;
+      iframe.title = title;
+      iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+      iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = '0';
+
+      pipWindow.document.body.appendChild(iframe);
+      pipWindow.addEventListener('pagehide', handleWindowClose, { once: true });
+
+      pipWindowRef.current = pipWindow;
+      sessionRef.current = {
+        startSeconds,
+        startedAt: Date.now(),
+        wasPlaying: autoplay,
+      };
+
+      setIsPipActive(true);
+      onEnter?.({
+        startSeconds,
+        wasPlaying: autoplay,
+      });
+
+      return { ok: true, mode: 'document' };
     } catch (error) {
       console.error('進入畫中畫模式失敗:', error);
+      cleanupSession(false);
+      return { ok: false, reason: 'error', error };
     }
-  };
+  }, [buildEmbedUrl, cleanupSession, enabled, getCurrentTime, isPipSupported, onEnter]);
 
-  // 退出畫中畫模式
-  const exitPictureInPicture = async () => {
-    if (!document.pictureInPictureElement || !isPipSupported || !enabled) return;
-
-    try {
-      await document.exitPictureInPicture();
-    } catch (error) {
-      console.error('退出畫中畫模式失敗:', error);
+  const exitPictureInPicture = useCallback(async () => {
+    if (!isPipActive) {
+      return { ok: false, reason: 'inactive' };
     }
-  };
 
-  // 切換畫中畫模式
-  const togglePictureInPicture = async () => {
+    const pipWindow = pipWindowRef.current;
+    cleanupSession(true);
+
+    if (pipWindow && !pipWindow.closed) {
+      pipWindow.close();
+    }
+
+    return { ok: true };
+  }, [cleanupSession, isPipActive]);
+
+  const togglePictureInPicture = useCallback(async (options) => {
     if (isPipActive) {
-      await exitPictureInPicture();
-    } else {
-      await enterPictureInPicture();
+      return exitPictureInPicture();
     }
-  };
+
+    return enterPictureInPicture(options);
+  }, [enterPictureInPicture, exitPictureInPicture, isPipActive]);
 
   return {
-    videoRef,
     isPipSupported,
     isPipActive,
+    supportMode,
     enterPictureInPicture,
     exitPictureInPicture,
-    togglePictureInPicture
+    togglePictureInPicture,
   };
 };
 

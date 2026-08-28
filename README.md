@@ -74,3 +74,26 @@ npm run build
 ## 注意事項
 
 本應用僅供學習和個人使用，請遵守YouTube的服務條款。應用不會下載或存儲任何YouTube內容，僅提供更簡潔的觀看界面。
+
+## 部署到 Render（Static Site）
+
+- 伺服器端 Rewrite（首選）
+  - 在 `render.yaml` 設定：
+    - `type: static_site`
+    - `buildCommand: ./render-build.sh`
+    - `publishPath: build`
+    - `routes`：新增 `type: rewrite`，`source: /*`，`destination: /index.html`
+  - 若服務不是 Blueprint 方式建立，請在 Render 控制台的 Redirects/Rewrites 手動添加同樣的 rewrite。
+
+- 404 前端兜底（容錯）
+  - `public/404.html` 會在 `*.onrender.com` 域名下把 404 路由重導至 `/index.html?/<path>`。
+  - `public/index.html` 內的解碼腳本會將 `?/<path>` 還原為 SPA 路徑（例如 `/debug`）。
+  - 伺服器 rewrite 與前端兜底不衝突；建議兩者都保留以提升穩健性。
+
+- 部署後驗證
+  - 直接訪問 `/debug` 應可正常顯示環境資訊與事件記錄。
+  - 常見效能指標：首頁 FCP 約 1–2s、TTFB 約 200–300ms；SPA 內部導覽可能看到 `TTFB: 0`（快取/軟導覽）。
+
+- Service Worker
+  - 目前為排查頁面閃爍暫停註冊，如需啟用，解除 `public/index.html` 中註冊程式的註解並部署。
+  - 啟用後請再次驗證深層路由與快取行為，確保不影響 SPA 導覽。

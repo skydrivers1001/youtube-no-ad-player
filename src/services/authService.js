@@ -11,6 +11,7 @@ const REDIRECT_URI = window.location.origin + '/auth/google/callback';
 
 // 請求的權限範圍
 const SCOPES = [
+  'https://www.googleapis.com/auth/youtube',
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/youtube.force-ssl',
   'https://www.googleapis.com/auth/userinfo.profile',
@@ -25,7 +26,7 @@ const AUTH_STORAGE_KEY = 'youtuber_no_ad_auth';
  */
 export const initiateGoogleAuth = () => {
   // 使用 token 響應類型，不需要客戶端密鑰
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${encodeURIComponent(SCOPES)}&prompt=consent`;
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${encodeURIComponent(SCOPES)}&prompt=consent&include_granted_scopes=true`;
   
   // 重定向到 Google 登入頁面
   window.location.href = authUrl;
@@ -40,6 +41,11 @@ export const syncUserPlaylists = async () => {
     const authData = loadAuthFromStorage();
     if (!authData || !authData.accessToken) {
       throw new Error('未登入，無法同步');
+    }
+
+    const scopeOk = await verifyTokenScopes(authData.accessToken, ['https://www.googleapis.com/auth/youtube']);
+    if (!scopeOk) {
+      throw new Error('授權範圍不足：請重新登入並允許 YouTube 權限');
     }
 
     // 從 Redux 獲取本地播放清單
@@ -65,6 +71,9 @@ export const syncUserPlaylists = async () => {
           },
         },
         {
+          params: {
+            part: 'snippet,status',
+          },
           headers: {
             Authorization: `Bearer ${authData.accessToken}`,
             'Content-Type': 'application/json',
@@ -88,6 +97,9 @@ export const syncUserPlaylists = async () => {
             },
           },
           {
+            params: {
+              part: 'snippet',
+            },
             headers: {
               Authorization: `Bearer ${authData.accessToken}`,
               'Content-Type': 'application/json',
@@ -99,8 +111,25 @@ export const syncUserPlaylists = async () => {
 
     return true;
   } catch (error) {
+    const status = error?.response?.status;
+    const apiMessage = error?.response?.data?.error?.message || error?.message;
+    const reason = error?.response?.data?.error?.errors?.[0]?.reason;
+    let message = apiMessage || '同步失敗';
+    if (status === 403 || reason === 'insufficientPermissions') {
+      message = '權限不足：請重新授權並允許 YouTube 權限';
+    } else if (reason === 'youtubeSignupRequired') {
+      message = '此帳號尚未建立 YouTube 頻道，請先建立頻道再同步';
+    } else if (reason === 'accessNotConfigured') {
+      message = 'Cloud 專案未啟用 YouTube Data API v3，請至 Console 啟用';
+    } else if (reason === 'quotaExceeded') {
+      message = 'API 配額不足，請稍後重試或提升配額';
+    } else if (status === 401) {
+      message = '認證失效：請重新登入';
+    } else if (status === 400) {
+      message = '請求無效：請重試';
+    }
     console.error('同步播放清單時出錯:', error);
-    throw error;
+    throw new Error(message);
   }
 };
 
@@ -346,4 +375,22 @@ export const fetchWatchHistory = async (accessToken) => {
     console.error('獲取觀看歷史時出錯:', error);
     throw error;
   }
+};
+
+export const verifyTokenScopes = async (accessToken, requiredScopes) => {
+  try {
+    const res = await axios.get('https://www.googleapis.com/oauth2/v3/tokeninfo', {
+      params: { access_token: accessToken },
+    });
+    const scopeStr = res?.data?.scope || '';
+    const granted = scopeStr.split(' ');
+    return requiredScopes.every((s) => granted.includes(s));
+  } catch (e) {
+    return false;
+  }
+};
+
+export const reloginForScopes = () => {
+  logout();
+  initiateGoogleAuth();
 };

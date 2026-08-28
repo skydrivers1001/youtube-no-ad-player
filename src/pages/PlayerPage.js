@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Box, Typography, Container, Paper, Button, Menu, MenuItem } from '@mui/material';
+import { Alert, Box, Typography, Container, Paper, Button, Menu, MenuItem } from '@mui/material';
 import { FaPlus } from 'react-icons/fa';
 import VideoPlayer from '../components/player/VideoPlayer';
 import { addVideoToPlaylist, addToWatchHistory, addToRecentlyPlayed } from '../store/playlistsSlice';
@@ -84,12 +84,17 @@ const PlayerPage = () => {
         {/* 視頻播放器 */}
         <VideoPlayer 
           videoId={videoId} 
+          title={videoTitle}
+          channelName={channelName}
           onReady={handlePlayerReady}
           autoplay={settings.autoplayVideos}
         />
         
         {/* 影片信息 */}
         <Box sx={{ p: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            手機端播放器會優先使用 YouTube 原生控制列，以提高背景播放與小窗播放的可用性；實際支援度仍取決於瀏覽器與系統限制。
+          </Alert>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <Box>
               <Typography variant="h5" gutterBottom>

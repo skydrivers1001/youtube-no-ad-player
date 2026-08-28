@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Box, IconButton, Slider, Typography, Paper, Tooltip } from '@mui/material';
-import { 
-  FaPlay, 
-  FaPause, 
-  FaExpand, 
-  FaCompress, 
-  FaVolumeUp, 
+import { Alert, Box, IconButton, Slider, Typography, Paper, Tooltip } from '@mui/material';
+import {
+  FaPlay,
+  FaPause,
+  FaExpand,
+  FaCompress,
+  FaVolumeUp,
   FaVolumeMute,
   FaForward,
   FaBackward,
@@ -18,12 +18,21 @@ import usePictureInPicture from '../../hooks/usePictureInPicture';
 import { updateVideoProgress, selectVideoProgress, markVideoCompleted } from '../../store/progressSlice';
 import { recordDataUsage } from '../../store/statisticsSlice';
 
-const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
+const NOTICE_AUTO_HIDE_MS = 3500;
+
+const VideoPlayer = ({
+  videoId,
+  title = '影片',
+  channelName = '頻道',
+  onReady,
+  autoplay = true,
+}) => {
   const dispatch = useDispatch();
   const settings = useSelector((state) => state.settings);
   const savedProgress = useSelector((state) => selectVideoProgress(state, videoId));
-  
+
   const [player, setPlayer] = useState(null);
+  const playerRef = useRef(null);
   const [playerState, setPlayerState] = useState({
     playing: false,
     volume: 80,
@@ -34,18 +43,38 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     duration: 0,
     buffered: 0,
     focusMode: false,
-    subtitlesEnabled: settings.defaultSubtitlesEnabled || true,
+    subtitlesEnabled: settings.defaultSubtitlesEnabled !== false,
   });
-  
+  const playerStateRef = useRef(playerState);
+
   const [showControls, setShowControls] = useState(true);
+  const [playbackNotice, setPlaybackNotice] = useState(null);
   const controlsTimeoutRef = useRef(null);
-  
+  const noticeTimeoutRef = useRef(null);
+  const backgroundPausedRef = useRef(false);
+  const dataUsageIntervalRef = useRef(null);
+
   const ENABLE_CONTROL_AUTO_HIDE = false;
-  
+
   const [isTouchDevice, setIsTouchDevice] = useState(false);
-  
+
   // 讓整個播放器容器能進入真正的瀏覽器全螢幕
   const containerRef = useRef(null);
+
+  const showNotice = useCallback((message, severity = 'info') => {
+    if (noticeTimeoutRef.current) {
+      clearTimeout(noticeTimeoutRef.current);
+    }
+
+    setPlaybackNotice({ message, severity });
+    noticeTimeoutRef.current = setTimeout(() => {
+      setPlaybackNotice(null);
+    }, NOTICE_AUTO_HIDE_MS);
+  }, []);
+
+  useEffect(() => {
+    playerStateRef.current = playerState;
+  }, [playerState]);
 
   useEffect(() => {
     const checkTouchDevice = () => {
@@ -54,12 +83,20 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     setIsTouchDevice(checkTouchDevice());
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (noticeTimeoutRef.current) {
+        clearTimeout(noticeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // 同步監聽 Fullscreen 變化（避免使用者透過 ESC 或系統手勢退出時狀態不同步）
   useEffect(() => {
     const handleFsChange = () => {
       const fsEl = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
       const isFs = !!fsEl && (fsEl === containerRef.current || containerRef.current?.contains(fsEl));
-      setPlayerState(prev => ({ ...prev, fullscreen: isFs }));
+      setPlayerState((prev) => ({ ...prev, fullscreen: isFs }));
       document.body.style.overflow = isFs ? 'hidden' : '';
     };
     document.addEventListener('fullscreenchange', handleFsChange);
@@ -71,37 +108,85 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       document.removeEventListener('msfullscreenchange', handleFsChange);
     };
   }, []);
-  
+
   const [dataUsageTracker, setDataUsageTracker] = useState({
     lastRecordedTime: 0,
     totalWatchTime: 0,
     estimatedDataUsage: 0
   });
-  const dataUsageIntervalRef = useRef(null);
-  
-  const { 
-    isPipSupported, 
-    togglePictureInPicture 
-  } = usePictureInPicture({ 
-    enabled: settings.pictureInPictureEnabled 
+
+  const buildEmbedUrl = useCallback(({ autoplay: pipAutoplay, startSeconds }) => {
+    const language = settings.defaultSubtitleLanguage === 'auto'
+      ? 'zh-TW'
+      : settings.defaultSubtitleLanguage;
+    const params = new URLSearchParams({
+      autoplay: pipAutoplay ? '1' : '0',
+      start: String(Math.max(0, Math.floor(startSeconds || 0))),
+      playsinline: '1',
+      controls: '1',
+      rel: '0',
+      modestbranding: '1',
+      iv_load_policy: '3',
+    });
+
+    if (settings.defaultSubtitlesEnabled && language !== 'none') {
+      params.set('cc_load_policy', '1');
+      params.set('hl', language);
+    }
+
+    return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+  }, [settings.defaultSubtitleLanguage, settings.defaultSubtitlesEnabled, videoId]);
+
+  const {
+    isPipSupported,
+    isPipActive,
+    supportMode,
+    togglePictureInPicture
+  } = usePictureInPicture({
+    enabled: settings.enablePictureInPicture,
+    buildEmbedUrl,
+    getCurrentTime: () => playerRef.current?.getCurrentTime?.() || 0,
+    getShouldResumePlayback: () => !document.hidden,
+    onEnter: ({ wasPlaying }) => {
+      if (wasPlaying) {
+        playerRef.current?.pauseVideo?.();
+      }
+      showNotice('已切換到小窗播放', 'info');
+    },
+    onExit: ({ estimatedCurrentTime, resumePlaybackInSource }) => {
+      const currentPlayer = playerRef.current;
+      if (!currentPlayer) {
+        return;
+      }
+
+      currentPlayer.seekTo(estimatedCurrentTime, true);
+      if (resumePlaybackInSource) {
+        currentPlayer.playVideo();
+      }
+      showNotice('已回到頁面播放器', 'success');
+    },
   });
-  
+
   const opts = useMemo(() => ({
     height: '100%',
     width: '100%',
     playerVars: {
       autoplay: autoplay ? 1 : 0,
-      controls: 0,
+      controls: isTouchDevice ? 1 : 0,
       rel: 0,
       showinfo: 0,
       modestbranding: 1,
       iv_load_policy: 3,
       cc_load_policy: settings.defaultSubtitlesEnabled ? 1 : 0,
-      hl: settings.defaultSubtitlesLanguage || 'zh-TW',
-      // iOS/Safari 內嵌播放，避免自動切進原生全螢幕導致自訂控制列消失
+      hl: settings.defaultSubtitleLanguage === 'auto' ? 'zh-TW' : settings.defaultSubtitleLanguage,
       playsinline: 1,
     },
-  }), [autoplay, settings]);
+  }), [
+    autoplay,
+    isTouchDevice,
+    settings.defaultSubtitleLanguage,
+    settings.defaultSubtitlesEnabled,
+  ]);
 
   const playerStyle = useMemo(() => ({
     width: '100%',
@@ -111,34 +196,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
   const startDataUsageTracking = useCallback(() => {
     if (dataUsageIntervalRef.current) return;
     const startTime = Date.now();
-    setDataUsageTracker(prev => ({ ...prev, lastRecordedTime: startTime }));
-    // 暫時註解掉數據使用追蹤的 setInterval 以解決頁面閃爍問題
-    // dataUsageIntervalRef.current = setInterval(() => {
-    //     const currentTime = Date.now();
-    //     const timeDiff = (currentTime - dataUsageTracker.lastRecordedTime) / 1000;
-
-    //     if (timeDiff > 0) {
-    //         const estimatedUsageMB = (timeDiff / 60) * 3;
-    //         setDataUsageTracker(prev => {
-    //             const newEstimatedUsage = prev.estimatedDataUsage + estimatedUsageMB;
-    //             if (newEstimatedUsage >= 30) {
-    //                 dispatch(recordDataUsage(newEstimatedUsage));
-    //                 return {
-    //                     ...prev,
-    //                     lastRecordedTime: currentTime,
-    //                     totalWatchTime: prev.totalWatchTime + timeDiff,
-    //                     estimatedDataUsage: 0
-    //                 };
-    //             }
-    //             return {
-    //                 ...prev,
-    //                 lastRecordedTime: currentTime,
-    //                 totalWatchTime: prev.totalWatchTime + timeDiff,
-    //                 estimatedDataUsage: newEstimatedUsage
-    //             };
-    //         });
-    //     }
-    // }, 5000);
+    setDataUsageTracker((prev) => ({ ...prev, lastRecordedTime: startTime }));
   }, []);
 
   const stopDataUsageTracking = useCallback(() => {
@@ -147,16 +205,42 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       dataUsageIntervalRef.current = null;
       if (dataUsageTracker.estimatedDataUsage > 0) {
         dispatch(recordDataUsage(dataUsageTracker.estimatedDataUsage));
-        setDataUsageTracker(prev => ({ ...prev, estimatedDataUsage: 0 }));
+        setDataUsageTracker((prev) => ({ ...prev, estimatedDataUsage: 0 }));
       }
     }
   }, [dispatch, dataUsageTracker.estimatedDataUsage]);
 
+  const updatePlaybackState = useCallback((updater) => {
+    setPlayerState((prev) => {
+      const nextState = typeof updater === 'function' ? updater(prev) : updater;
+      playerStateRef.current = nextState;
+      return nextState;
+    });
+  }, []);
+
+  const syncCurrentTime = useCallback((nextTime) => {
+    updatePlaybackState((prev) => ({
+      ...prev,
+      currentTime: nextTime,
+    }));
+  }, [updatePlaybackState]);
+
+  const seekRelative = useCallback((seconds) => {
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) return;
+
+    const duration = playerStateRef.current.duration || currentPlayer.getDuration?.() || 0;
+    const newTime = Math.max(0, Math.min(duration, (currentPlayer.getCurrentTime?.() || 0) + seconds));
+    currentPlayer.seekTo(newTime, true);
+    syncCurrentTime(newTime);
+  }, [syncCurrentTime]);
+
   const handleReady = useCallback((event) => {
     const ytPlayer = event.target;
     setPlayer(ytPlayer);
-    ytPlayer.setPlaybackRate(playerState.playbackRate);
-    ytPlayer.setVolume(playerState.volume);
+    playerRef.current = ytPlayer;
+    ytPlayer.setPlaybackRate(playerStateRef.current.playbackRate);
+    ytPlayer.setVolume(playerStateRef.current.volume);
 
     if (videoId) {
       dispatch(recordDataUsage(5));
@@ -169,17 +253,22 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     if (onReady) {
       onReady(ytPlayer);
     }
-  }, [dispatch, onReady, playerState.playbackRate, playerState.volume, savedProgress, videoId]);
+  }, [dispatch, onReady, savedProgress, videoId]);
 
   const handleStateChange = useCallback((event) => {
+    const ytPlayer = event.target;
     const isPlaying = event.data === 1;
     const isEnded = event.data === 0;
 
-    setPlayerState(prev => ({
+    updatePlaybackState((prev) => ({
       ...prev,
       playing: isPlaying,
-      duration: player ? player.getDuration() : 0,
+      duration: ytPlayer.getDuration?.() || 0,
     }));
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
 
     if (isPlaying) {
       startDataUsageTracking();
@@ -187,26 +276,24 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       stopDataUsageTracking();
     }
 
-    if (isEnded && player) {
-      const currentTime = player.getCurrentTime();
-      const duration = player.getDuration();
-      if (currentTime / duration > 0.95) {
+    if (isEnded) {
+      const currentTime = ytPlayer.getCurrentTime?.() || 0;
+      const duration = ytPlayer.getDuration?.() || 0;
+      if (duration > 0 && currentTime / duration > 0.95) {
         dispatch(markVideoCompleted({ videoId }));
       }
     }
-  }, [player, dispatch, videoId, startDataUsageTracking, stopDataUsageTracking]);
+  }, [dispatch, startDataUsageTracking, stopDataUsageTracking, updatePlaybackState, videoId]);
 
   useEffect(() => {
     if (!player) return;
-    
-    // 暫時註解掉頻繁的進度更新以解決頁面閃爍問題
+
     const interval = setInterval(() => {
-      const currentTime = player.getCurrentTime();
-      const duration = player.getDuration();
-      const buffered = player.getVideoLoadedFraction() * duration;
-      
-      setPlayerState(prev => {
-        // 註解掉頻繁的 Redux 更新
+      const currentTime = player.getCurrentTime?.() || 0;
+      const duration = player.getDuration?.() || 0;
+      const buffered = (player.getVideoLoadedFraction?.() || 0) * duration;
+
+      updatePlaybackState((prev) => {
         if (prev.playing && duration > 0 && currentTime > 5) {
           dispatch(updateVideoProgress({
             videoId,
@@ -214,7 +301,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
             duration
           }));
         }
-        
+
         return {
           ...prev,
           currentTime,
@@ -223,91 +310,160 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
         };
       });
     }, 1000);
-    
+
     return () => clearInterval(interval);
-  }, [player, dispatch, videoId]);
-  
+  }, [player, dispatch, updatePlaybackState, videoId]);
+
   useEffect(() => {
     return () => {
       document.body.style.overflow = '';
       stopDataUsageTracking();
     };
   }, [stopDataUsageTracking]);
-  
-  const handleMouseMove = () => {
-    setShowControls(true);
-    
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    
-    if (ENABLE_CONTROL_AUTO_HIDE) {
-      const hideDelay = isTouchDevice ? 5000 : 3000;
-      
-      controlsTimeoutRef.current = setTimeout(() => {
-        if (playerState.playing) {
-          setShowControls(false);
-        }
-      }, hideDelay);
-    }
-  };
-  
-  const handleTouchInteraction = () => {
-    setShowControls(true);
-    
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    
-    if (ENABLE_CONTROL_AUTO_HIDE) {
-      controlsTimeoutRef.current = setTimeout(() => {
-        if (playerState.playing) {
-          setShowControls(false);
-        }
-      }, 5000);
-    }
-  };
-  
-  const togglePlay = () => {
+
+  useEffect(() => {
     if (!player) return;
-    
-    if (playerState.playing) {
-      player.pauseVideo();
-    } else {
-      player.playVideo();
+
+    const handleVisibilityChange = () => {
+      const currentPlayer = playerRef.current;
+      if (!currentPlayer) return;
+
+      if (document.hidden) {
+        if (!settings.enableBackgroundPlay && playerStateRef.current.playing) {
+          currentPlayer.pauseVideo();
+          backgroundPausedRef.current = true;
+        }
+        return;
+      }
+
+      if (backgroundPausedRef.current) {
+        currentPlayer.playVideo();
+        backgroundPausedRef.current = false;
+        showNotice('已回到前景並恢復播放', 'success');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [player, settings.enableBackgroundPlay, showNotice]);
+
+  useEffect(() => {
+    if (!player || !('mediaSession' in navigator)) {
+      return;
+    }
+
+    if (window.MediaMetadata) {
+      navigator.mediaSession.metadata = new window.MediaMetadata({
+        title,
+        artist: channelName,
+        album: 'Youtuber no AD',
+        artwork: [
+          {
+            src: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            sizes: '480x360',
+            type: 'image/jpeg',
+          },
+        ],
+      });
+    }
+
+    const setHandler = (action, handler) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch (error) {
+        console.debug(`Media Session action ${action} 不可用`, error);
+      }
+    };
+
+    setHandler('play', () => playerRef.current?.playVideo?.());
+    setHandler('pause', () => playerRef.current?.pauseVideo?.());
+    setHandler('seekbackward', () => seekRelative(-10));
+    setHandler('seekforward', () => seekRelative(10));
+    setHandler('seekto', (details) => {
+      if (!Number.isFinite(details?.seekTime)) return;
+      playerRef.current?.seekTo?.(details.seekTime, true);
+      syncCurrentTime(details.seekTime);
+    });
+
+    navigator.mediaSession.playbackState = playerState.playing ? 'playing' : 'paused';
+
+    return () => {
+      setHandler('play', null);
+      setHandler('pause', null);
+      setHandler('seekbackward', null);
+      setHandler('seekforward', null);
+      setHandler('seekto', null);
+    };
+  }, [channelName, player, playerState.playing, seekRelative, syncCurrentTime, title, videoId]);
+
+  const handleMouseMove = () => {
+    if (isTouchDevice) return;
+    setShowControls(true);
+
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+
+    if (ENABLE_CONTROL_AUTO_HIDE) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        if (playerStateRef.current.playing) {
+          setShowControls(false);
+        }
+      }, 3000);
     }
   };
-  
-  const handleVolumeChange = (event, newValue) => {
-    player.setVolume(newValue);
-    setPlayerState(prev => ({
+
+  const togglePlay = () => {
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) return;
+
+    if (playerStateRef.current.playing) {
+      currentPlayer.pauseVideo();
+    } else {
+      currentPlayer.playVideo();
+    }
+  };
+
+  const handleVolumeChange = (_, newValue) => {
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) return;
+
+    currentPlayer.setVolume(newValue);
+    updatePlaybackState((prev) => ({
       ...prev,
       volume: newValue,
       muted: newValue === 0,
     }));
   };
-  
+
   const toggleMute = () => {
-    if (playerState.muted) {
-      player.unMute();
-      player.setVolume(playerState.volume || 50);
-      setPlayerState(prev => ({ ...prev, muted: false }));
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) return;
+
+    if (playerStateRef.current.muted) {
+      currentPlayer.unMute();
+      currentPlayer.setVolume(playerStateRef.current.volume || 50);
+      updatePlaybackState((prev) => ({ ...prev, muted: false }));
     } else {
-      player.mute();
-      setPlayerState(prev => ({ ...prev, muted: true }));
+      currentPlayer.mute();
+      updatePlaybackState((prev) => ({ ...prev, muted: true }));
     }
   };
-  
+
   const setPlaybackRate = (rate) => {
-    player.setPlaybackRate(rate);
-    setPlayerState(prev => ({ ...prev, playbackRate: rate }));
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) return;
+
+    currentPlayer.setPlaybackRate(rate);
+    updatePlaybackState((prev) => ({ ...prev, playbackRate: rate }));
   };
-  
-  const toggleFullscreen = async () => {
-    setPlayerState(prev => {
+
+  const toggleFullscreen = () => {
+    updatePlaybackState((prev) => {
       const newFullscreenState = !prev.fullscreen;
 
-      // 嘗試使用瀏覽器 Fullscreen API
       try {
         const el = containerRef.current;
         if (newFullscreenState && el) {
@@ -329,56 +485,45 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
             }
           }
         }
-      } catch (e) {
-        console.log('Fullscreen API error:', e);
+      } catch (error) {
+        console.log('Fullscreen API error:', error);
       }
 
-      if (newFullscreenState) {
-        document.body.style.overflow = 'hidden';
-      } else {
-        document.body.style.overflow = '';
-      }
-      
+      document.body.style.overflow = newFullscreenState ? 'hidden' : '';
       return { ...prev, fullscreen: newFullscreenState };
     });
   };
-  
 
   const toggleSubtitles = () => {
-    if (!player) return;
-    
-    const newSubtitlesState = !playerState.subtitlesEnabled;
-    setPlayerState(prev => ({ ...prev, subtitlesEnabled: newSubtitlesState }));
-    
-    // 控制 YouTube 播放器的字幕顯示
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) return;
+
+    const newSubtitlesState = !playerStateRef.current.subtitlesEnabled;
+    updatePlaybackState((prev) => ({ ...prev, subtitlesEnabled: newSubtitlesState }));
+
     try {
       if (newSubtitlesState) {
-        // 開啟字幕 - 設定字幕語言
         const language = settings.defaultSubtitleLanguage === 'auto' ? 'zh-TW' : settings.defaultSubtitleLanguage;
         if (language !== 'none') {
-          player.setOption('captions', 'reload', true);
-          player.setOption('captions', 'displaySettings', { 'background': 'black' });
+          currentPlayer.setOption('captions', 'reload', true);
+          currentPlayer.setOption('captions', 'displaySettings', { background: 'black' });
         }
       } else {
-        // 關閉字幕
-        player.unloadModule('captions');
+        currentPlayer.unloadModule('captions');
       }
     } catch (error) {
       console.log('字幕控制錯誤:', error);
     }
   };
-  
-  const handleSeek = (event, newValue) => {
-    player.seekTo(newValue);
-    setPlayerState(prev => ({ ...prev, currentTime: newValue }));
+
+  const handleSeek = (_, newValue) => {
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) return;
+
+    currentPlayer.seekTo(newValue, true);
+    syncCurrentTime(newValue);
   };
-  
-  const seekRelative = (seconds) => {
-    const newTime = Math.max(0, Math.min(playerState.duration, playerState.currentTime + seconds));
-    player.seekTo(newTime);
-    setPlayerState(prev => ({ ...prev, currentTime: newTime }));
-  };
-  
+
   const formatTime = (seconds) => {
     if (!Number.isFinite(seconds) || seconds < 0) return '0:00:00';
     const hrs = Math.floor(seconds / 3600);
@@ -387,7 +532,7 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
     const pad2 = (n) => (n < 10 ? '0' : '') + n;
     return `${hrs}:${pad2(mins)}:${pad2(secs)}`;
   };
-  
+
   const handleDoubleClick = (side) => {
     if (side === 'left') {
       seekRelative(-10);
@@ -395,9 +540,34 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
       seekRelative(10);
     }
   };
-  
+
+  const handleTogglePictureInPicture = async () => {
+    if (!settings.enablePictureInPicture) {
+      showNotice('請先在設定頁啟用畫中畫功能', 'warning');
+      return;
+    }
+
+    if (!isPipSupported) {
+      if (isTouchDevice) {
+        showNotice('手機端請使用 YouTube 原生控制列或瀏覽器選單進入小窗', 'info');
+      } else {
+        showNotice('此瀏覽器不支援目前的畫中畫模式', 'warning');
+      }
+      return;
+    }
+
+    const result = await togglePictureInPicture({
+      title,
+      autoplay: playerStateRef.current.playing,
+    });
+
+    if (!result?.ok) {
+      showNotice('無法切換畫中畫模式，請改用瀏覽器原生控制', 'warning');
+    }
+  };
+
   return (
-    <Box 
+    <Box
       ref={containerRef}
       sx={{
         position: 'relative',
@@ -414,47 +584,48 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
         }),
       }}
       onMouseMove={handleMouseMove}
-      onTouchStart={handleTouchInteraction}
-      onTouchMove={handleTouchInteraction}
     >
-      <Box 
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '30%',
-          height: '100%',
-          zIndex: 1,
-        }}
-        onDoubleClick={() => handleDoubleClick('left')}
-      />
-      
-      <Box 
-        sx={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: '30%',
-          height: '100%',
-          zIndex: 1,
-        }}
-        onDoubleClick={() => handleDoubleClick('right')}
-      />
-      
-      <Box 
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: '30%',
-          width: '40%',
-          height: '100%',
-          zIndex: 1,
-        }}
-        onClick={togglePlay}
-        onTouchEnd={togglePlay}
-      />
-      
-      <Box 
+      {!isTouchDevice && (
+        <>
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '30%',
+              height: '100%',
+              zIndex: 1,
+            }}
+            onDoubleClick={() => handleDoubleClick('left')}
+          />
+
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: '30%',
+              height: '100%',
+              zIndex: 1,
+            }}
+            onDoubleClick={() => handleDoubleClick('right')}
+          />
+
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: '30%',
+              width: '40%',
+              height: '100%',
+              zIndex: 1,
+            }}
+            onClick={togglePlay}
+          />
+        </>
+      )}
+
+      <Box
         sx={{
           position: 'absolute',
           top: 0,
@@ -477,9 +648,44 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
           style={playerStyle}
         />
       </Box>
-      
-      {showControls && (
-        <Box 
+
+      {playbackNotice && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            right: 12,
+            zIndex: playerState.fullscreen ? 100001 : 3,
+          }}
+        >
+          <Alert severity={playbackNotice.severity} sx={{ py: 0.5 }}>
+            {playbackNotice.message}
+          </Alert>
+        </Box>
+      )}
+
+      {isTouchDevice && (
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            px: 1.5,
+            py: 1,
+            background: 'linear-gradient(transparent, rgba(0,0,0,0.6))',
+            zIndex: 2,
+          }}
+        >
+          <Typography variant="caption" sx={{ color: 'white' }}>
+            手機端已改用 YouTube 原生控制列，較利於背景播放與小窗功能。
+          </Typography>
+        </Box>
+      )}
+
+      {!isTouchDevice && showControls && (
+        <Box
           sx={{
             position: 'absolute',
             bottom: 0,
@@ -493,8 +699,6 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
             zIndex: playerState.fullscreen ? 100000 : 2,
             pointerEvents: 'auto',
           }}
-          onTouchStart={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
         >
           <Box sx={{ mb: 1, position: 'relative', height: '20px' }}>
             <Slider
@@ -510,24 +714,16 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
                 '& .MuiSlider-track': { bgcolor: 'rgba(255,255,255,0.3)', height: '4px' },
                 '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.1)', height: '4px' },
                 '& .MuiSlider-thumb': { display: 'none' },
-                // 修復 iPhone 設備上的顯示問題
-                '@media (max-width: 768px)': {
-                  position: 'relative',
-                  transform: 'none',
-                  '& .MuiSlider-root': {
-                    transform: 'none !important',
-                  },
-                },
               }}
             />
-            
+
             <Slider
               value={playerState.currentTime}
               max={playerState.duration}
-              onChange={(event, newValue) => {
-                setPlayerState(prev => ({ ...prev, currentTime: newValue }));
-                if (player && Number.isFinite(newValue)) {
-                  player.seekTo(newValue);
+              onChange={(_, newValue) => {
+                syncCurrentTime(newValue);
+                if (playerRef.current && Number.isFinite(newValue)) {
+                  playerRef.current.seekTo(newValue, true);
                 }
               }}
               onChangeCommitted={handleSeek}
@@ -537,41 +733,29 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
                 height: '4px',
                 '& .MuiSlider-track': { bgcolor: 'primary.main', height: '4px' },
                 '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.2)', height: '4px' },
-                '& .MuiSlider-thumb': { 
-                  width: 12, 
-                  height: 12, 
+                '& .MuiSlider-thumb': {
+                  width: 12,
+                  height: 12,
                   '&:hover': { width: 14, height: 14 },
-                  // 確保滑塊在移動設備上正確顯示
-                  '@media (max-width: 768px)': {
-                    width: 16,
-                    height: 16,
-                    '&:hover': { width: 18, height: 18 },
-                  },
-                },
-                // 修復 iPhone 設備上的顯示問題
-                '@media (max-width: 768px)': {
-                  '& .MuiSlider-root': {
-                    transform: 'none !important',
-                  },
                 },
               }}
             />
           </Box>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
               <IconButton onClick={togglePlay} sx={{ color: 'white' }}>
                 {playerState.playing ? <FaPause /> : <FaPlay />}
               </IconButton>
-              
+
               <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }}>
                 <FaBackward />
               </IconButton>
-              
+
               <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }}>
                 <FaForward />
               </IconButton>
-              
+
               <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
                 <IconButton onClick={toggleMute} sx={{ color: 'white' }}>
                   {playerState.muted ? <FaVolumeMute /> : <FaVolumeUp />}
@@ -580,23 +764,23 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
                   value={playerState.muted ? 0 : playerState.volume}
                   onChange={handleVolumeChange}
                   aria-label="音量"
-                  sx={{ 
-                    width: 80, 
+                  sx={{
+                    width: 80,
                     mx: 1,
                     '& .MuiSlider-track': { bgcolor: 'white' },
                     '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.3)' },
                   }}
                 />
               </Box>
-              
-              <Typography variant="body2" sx={{ color: 'white', mx: 1 }}>
+
+              <Typography variant="body2" sx={{ color: 'white', mx: 1, whiteSpace: 'nowrap' }}>
                 {formatTime(playerState.currentTime)} / {formatTime(playerState.duration)}
               </Typography>
             </Box>
-            
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <Box sx={{ display: 'flex', mr: 1 }}>
-                {[0.5, 1, 1.25, 1.5, 2].map(rate => (
+                {[0.5, 1, 1.25, 1.5, 2].map((rate) => (
                   <Tooltip key={rate} title={`${rate}x 速度`}>
                     <Paper
                       onClick={() => setPlaybackRate(rate)}
@@ -615,11 +799,11 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
                   </Tooltip>
                 ))}
               </Box>
-              
-              <Tooltip title={playerState.subtitlesEnabled ? "關閉字幕" : "開啟字幕"}>
-                <IconButton 
-                  onClick={toggleSubtitles} 
-                  sx={{ 
+
+              <Tooltip title={playerState.subtitlesEnabled ? '關閉字幕' : '開啟字幕'}>
+                <IconButton
+                  onClick={toggleSubtitles}
+                  sx={{
                     color: playerState.subtitlesEnabled ? 'primary.main' : 'white',
                     '&:hover': {
                       color: playerState.subtitlesEnabled ? 'primary.light' : 'grey.300'
@@ -629,16 +813,19 @@ const VideoPlayer = ({ videoId, onReady, autoplay = true }) => {
                   <FaClosedCaptioning />
                 </IconButton>
               </Tooltip>
-              
-              {isPipSupported && settings.pictureInPictureEnabled && (
-                <Tooltip title="畫中畫模式">
-                  <IconButton onClick={togglePictureInPicture} sx={{ color: 'white' }}>
+
+              {settings.enablePictureInPicture && (
+                <Tooltip title={isPipActive ? '關閉畫中畫' : supportMode === 'document' ? '開啟畫中畫' : '顯示畫中畫說明'}>
+                  <IconButton
+                    onClick={handleTogglePictureInPicture}
+                    sx={{ color: isPipActive ? 'primary.main' : 'white' }}
+                  >
                     <FaExternalLinkAlt />
                   </IconButton>
                 </Tooltip>
               )}
-              
-              <Tooltip title={playerState.fullscreen ? "退出全螢幕" : "全螢幕"}>
+
+              <Tooltip title={playerState.fullscreen ? '退出全螢幕' : '全螢幕'}>
                 <IconButton onClick={toggleFullscreen} sx={{ color: 'white' }}>
                   {playerState.fullscreen ? <FaCompress /> : <FaExpand />}
                 </IconButton>

@@ -1,8 +1,7 @@
-import React from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Switch, FormControlLabel, Slider, Select, MenuItem, FormControl, InputLabel, Divider, Button, Paper, Alert } from '@mui/material';
 import { updateSettings } from '../store/settingsSlice';
-import { syncUserPlaylists, syncUserHistory } from '../services/authService';
+import { syncUserPlaylists, syncUserHistory, reloginForScopes } from '../services/authService';
 import { clearAllProgress, cleanupOldProgress, selectProgressCount } from '../store/progressSlice';
 import GoogleAuthButton from '../components/auth/GoogleAuthButton';
 
@@ -74,7 +73,7 @@ const SettingsPage = () => {
                 { value: 1.5, label: '1.5x' },
                 { value: 2, label: '2x' },
               ]}
-              onChange={(e, value) => handleSettingChange('defaultPlaybackRate', value)}
+              onChange={(_, value) => handleSettingChange('defaultPlaybackRate', value)}
               aria-labelledby="playback-rate-slider"
               sx={{ maxWidth: 300 }}
             />
@@ -115,6 +114,9 @@ const SettingsPage = () => {
           <Typography variant="h6" gutterBottom>
             進階功能
           </Typography>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            背景播放與畫中畫會優先套用在支援的瀏覽器上；手機端實際效果仍取決於系統限制，播放器頁會自動切換為較相容的 YouTube 原生控制列。
+          </Alert>
           <Box sx={{ mb: 2 }}>
             <FormControlLabel
               control={
@@ -125,6 +127,9 @@ const SettingsPage = () => {
               }
               label="啟用背景播放"
             />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
+              開啟後切到背景時不會主動暫停；若瀏覽器本身不允許，仍可能被系統中止。
+            </Typography>
           </Box>
           
           <Box sx={{ mb: 2 }}>
@@ -137,6 +142,9 @@ const SettingsPage = () => {
               }
               label="啟用畫中畫模式"
             />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
+              桌面端支援文件小窗時可直接開啟；手機端請優先使用 YouTube 原生控制列或瀏覽器內建小窗功能。
+            </Typography>
           </Box>
           
           <Box sx={{ mb: 2 }}>
@@ -166,7 +174,7 @@ const SettingsPage = () => {
                 { value: 60, label: '1小時' },
                 { value: 120, label: '2小時' },
               ]}
-              onChange={(e, value) => handleSettingChange('sleepTimerMinutes', value)}
+              onChange={(_, value) => handleSettingChange('sleepTimerMinutes', value)}
               aria-labelledby="sleep-timer-slider"
               sx={{ maxWidth: 300 }}
             />
@@ -187,9 +195,22 @@ const SettingsPage = () => {
                 <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <Button 
                     variant="outlined" 
-                    onClick={() => syncUserPlaylists()}
+                    onClick={async () => {
+                      try {
+                        await syncUserPlaylists();
+                        alert('播放清單同步完成');
+                      } catch (e) {
+                        alert(e?.message || '同步失敗');
+                      }
+                    }}
                   >
                     同步播放清單到 Google 帳號
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => reloginForScopes()}
+                  >
+                    重新授權（要求 YouTube 權限）
                   </Button>
                   <Button 
                     variant="outlined" 

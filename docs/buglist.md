@@ -98,3 +98,31 @@ This document records known bugs and their resolutions for future reference.
 - Implement more robust input validation for `isoDuration`.
 - Consider using a dedicated library for ISO 8601 duration parsing if complex duration formats are expected.
 - Add unit tests for `formatDuration` to cover edge cases, including invalid input and non-matching ISO durations.
+
+
+## BUG-003: Render 部署下深層路由（/debug）顯示不到
+
+- Status: Fixed
+- Affected route(s): `/debug`、以及其他深層連結（如 `/watch/...`）
+- Affected component(s): `public/404.html`, `public/index.html`, `render.yaml`
+
+### Symptoms
+- 在 Render 部署上，直接訪問 `/debug` 可能出現 404 或僅顯示「Redirecting...」，頁面無法載入。
+
+### Root Cause
+- 靜態主機未正確配置 SPA rewrite（`/* → /index.html`），深層路由被當成實體檔案路徑請求。
+- 專案中的 `404.html` 早期僅在 GitHub Pages 域名啟用 404 回寫，Render 未啟用前端兜底，導致直訪深層路徑拿到 404。
+
+### Fix Implemented
+- 在 `render.yaml` 中加入 rewrite 規則：`source: /*`、`destination: /index.html`，`type: rewrite`。
+- 在 `public/404.html` 新增 Render 域名兜底回退：將 404 重導到 `/index.html?/<原始路徑>`（以 query 方式攜帶原始路徑）。
+- 依賴 `public/index.html` 內的路由解碼腳本，將 `?/<path>` 還原為原始 SPA 路徑（例如 `/debug`）。
+- 暫時禁用 Service Worker 註冊以排查頁面閃爍，避免快取導致導覽異常干擾驗證。
+
+### Validation
+- 在 `https://<service>.onrender.com/debug` 可正常顯示 DebugLogsPage 的環境資訊與事件紀錄。
+- 首次載入首頁 FCP/TTFB 落於靜態站常見區間；後續 SPA 導覽可能出現 `TTFB: 0`（表示走快取/內部導覽）。
+
+### Follow-ups
+- 以伺服器端 rewrite 為主；保留 404 前端兜底以防配置漂移或環境差異。
+- 待頁面閃爍問題確認解決後，再重新啟用 Service Worker 註冊並重新驗證深層路由與快取行為。
