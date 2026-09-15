@@ -24,6 +24,8 @@ import {
 import { recordDataUsage } from '../../store/statisticsSlice';
 
 const NOTICE_AUTO_HIDE_MS = 3500;
+const ESTIMATED_MB_PER_PLAYBACK_SECOND = 0.12;
+const DATA_USAGE_BATCH_SECONDS = 15;
 
 const VideoPlayer = ({
   videoId,
@@ -56,6 +58,8 @@ const VideoPlayer = ({
   const [playbackNotice, setPlaybackNotice] = useState(null);
   const [resumePrompt, setResumePrompt] = useState(null);
   const [playerBrightness, setPlayerBrightness] = useState(1);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekValue, setSeekValue] = useState(0);
   const controlsTimeoutRef = useRef(null);
   const noticeTimeoutRef = useRef(null);
   const backgroundPausedRef = useRef(false);
@@ -74,7 +78,8 @@ const VideoPlayer = ({
     usedBackgroundPlay: false,
     wasPlaying: false,
   });
-  const dataUsageIntervalRef = useRef(null);
+  const lastPlaybackSampleRef = useRef(0);
+  const pendingUsageSecondsRef = useRef(0);
 
   const ENABLE_CONTROL_AUTO_HIDE = false;
 
@@ -116,7 +121,17 @@ const VideoPlayer = ({
   useEffect(() => {
     setResumePrompt(null);
     setPlayerBrightness(1);
+    setIsSeeking(false);
+    setSeekValue(0);
+    lastPlaybackSampleRef.current = 0;
+    pendingUsageSecondsRef.current = 0;
   }, [videoId]);
+
+  useEffect(() => {
+    if (!isSeeking) {
+      setSeekValue(playerState.currentTime);
+    }
+  }, [isSeeking, playerState.currentTime]);
 
   // 同步監聽 Fullscreen 變化（避免使用者透過 ESC 或系統手勢退出時狀態不同步）
   useEffect(() => {
@@ -135,12 +150,6 @@ const VideoPlayer = ({
       document.removeEventListener('msfullscreenchange', handleFsChange);
     };
   }, []);
-
-  const [dataUsageTracker, setDataUsageTracker] = useState({
-    lastRecordedTime: 0,
-    totalWatchTime: 0,
-    estimatedDataUsage: 0
-  });
 
   const buildEmbedUrl = useCallback(({ autoplay: pipAutoplay, startSeconds }) => {
     const language = settings.defaultSubtitleLanguage === 'auto'
@@ -221,23 +230,6 @@ const VideoPlayer = ({
     height: '100%',
   }), []);
 
-  const startDataUsageTracking = useCallback(() => {
-    if (dataUsageIntervalRef.current) return;
-    const startTime = Date.now();
-    setDataUsageTracker((prev) => ({ ...prev, lastRecordedTime: startTime }));
-  }, []);
-
-  const stopDataUsageTracking = useCallback(() => {
-    if (dataUsageIntervalRef.current) {
-      clearInterval(dataUsageIntervalRef.current);
-      dataUsageIntervalRef.current = null;
-      if (dataUsageTracker.estimatedDataUsage > 0) {
-        dispatch(recordDataUsage(dataUsageTracker.estimatedDataUsage));
-        setDataUsageTracker((prev) => ({ ...prev, estimatedDataUsage: 0 }));
-      }
-    }
-  }, [dispatch, dataUsageTracker.estimatedDataUsage]);
-
   const updatePlaybackState = useCallback((updater) => {
     setPlayerState((prev) => {
       const nextState = typeof updater === 'function' ? updater(prev) : updater;
@@ -254,6 +246,15 @@ const VideoPlayer = ({
   }, [updatePlaybackState]);
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+  const normalizeSliderValue = (value) => (Array.isArray(value) ? value[0] : value);
+  const flushPendingUsage = useCallback(() => {
+    if (pendingUsageSecondsRef.current <= 0) {
+      return;
+    }
+
+    dispatch(recordDataUsage(pendingUsageSecondsRef.current * ESTIMATED_MB_PER_PLAYBACK_SECOND));
+    pendingUsageSecondsRef.current = 0;
+  }, [dispatch]);
 
   const seekRelative = useCallback((seconds) => {
     const currentPlayer = playerRef.current;
@@ -263,6 +264,7 @@ const VideoPlayer = ({
     const newTime = Math.max(0, Math.min(duration, (currentPlayer.getCurrentTime?.() || 0) + seconds));
     currentPlayer.seekTo(newTime, true);
     syncCurrentTime(newTime);
+    lastPlaybackSampleRef.current = newTime;
   }, [syncCurrentTime]);
 
     const handleReady = useCallback((event) => {
@@ -272,9 +274,8 @@ const VideoPlayer = ({
     ytPlayer.setPlaybackRate(playerStateRef.current.playbackRate);
     ytPlayer.setVolume(playerStateRef.current.volume);
 
-    if (videoId) {
-      dispatch(recordDataUsage(5));
-    }
+    lastPlaybackSampleRef.current = ytPlayer.getCurrentTime?.() || 0;
+    pendingUsageSecondsRef.current = 0;
 
     if (savedProgress && savedProgress.currentTime > 5) {
         setResumePrompt({
@@ -287,7 +288,7 @@ const VideoPlayer = ({
     if (onReady) {
       onReady(ytPlayer);
     }
-    }, [autoplay, dispatch, onReady, savedProgress, videoId]);
+  }, [autoplay, onReady, savedProgress]);
 
   const handleStateChange = useCallback((event) => {
     const ytPlayer = event.target;
@@ -304,10 +305,9 @@ const VideoPlayer = ({
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     }
 
-    if (isPlaying) {
-      startDataUsageTracking();
-    } else {
-      stopDataUsageTracking();
+    if (!isPlaying) {
+      flushPendingUsage();
+      lastPlaybackSampleRef.current = ytPlayer.getCurrentTime?.() || 0;
     }
 
     if (isEnded) {
@@ -317,7 +317,7 @@ const VideoPlayer = ({
         dispatch(markVideoCompleted({ videoId }));
       }
     }
-  }, [dispatch, startDataUsageTracking, stopDataUsageTracking, updatePlaybackState, videoId]);
+  }, [dispatch, flushPendingUsage, updatePlaybackState, videoId]);
 
   useEffect(() => {
     if (!player) return;
@@ -326,6 +326,10 @@ const VideoPlayer = ({
       const currentTime = player.getCurrentTime?.() || 0;
       const duration = player.getDuration?.() || 0;
       const buffered = (player.getVideoLoadedFraction?.() || 0) * duration;
+      const previousSample = lastPlaybackSampleRef.current;
+      const playbackDelta = currentTime - previousSample;
+      const cappedPlaybackDelta = playbackDelta > 0 && playbackDelta <= 2.5 ? playbackDelta : 0;
+      lastPlaybackSampleRef.current = currentTime;
 
       updatePlaybackState((prev) => {
         if (prev.playing && duration > 0 && currentTime > 5) {
@@ -334,6 +338,13 @@ const VideoPlayer = ({
             currentTime,
             duration
           }));
+
+          pendingUsageSecondsRef.current += cappedPlaybackDelta;
+          if (pendingUsageSecondsRef.current >= DATA_USAGE_BATCH_SECONDS) {
+            const batchedSeconds = Math.floor(pendingUsageSecondsRef.current / DATA_USAGE_BATCH_SECONDS) * DATA_USAGE_BATCH_SECONDS;
+            pendingUsageSecondsRef.current -= batchedSeconds;
+            dispatch(recordDataUsage(batchedSeconds * ESTIMATED_MB_PER_PLAYBACK_SECOND));
+          }
         }
 
         return {
@@ -351,9 +362,9 @@ const VideoPlayer = ({
   useEffect(() => {
     return () => {
       document.body.style.overflow = '';
-      stopDataUsageTracking();
+      flushPendingUsage();
     };
-  }, [stopDataUsageTracking]);
+  }, [flushPendingUsage]);
 
   useEffect(() => {
     if (!player) return;
@@ -445,6 +456,7 @@ const VideoPlayer = ({
       if (!Number.isFinite(details?.seekTime)) return;
       playerRef.current?.seekTo?.(details.seekTime, true);
       syncCurrentTime(details.seekTime);
+      lastPlaybackSampleRef.current = details.seekTime;
     });
 
     navigator.mediaSession.playbackState = playerState.playing ? 'playing' : 'paused';
@@ -520,38 +532,37 @@ const VideoPlayer = ({
     updatePlaybackState((prev) => ({ ...prev, playbackRate: rate }));
   };
 
-  const toggleFullscreen = () => {
-    updatePlaybackState((prev) => {
-      const newFullscreenState = !prev.fullscreen;
+  const toggleFullscreen = async () => {
+    const el = containerRef.current;
+    const inFullscreen = Boolean(
+      document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
+    );
 
-      try {
-        const el = containerRef.current;
-        if (newFullscreenState && el) {
-          if (el.requestFullscreen) {
-            el.requestFullscreen();
-          } else if (el.webkitRequestFullscreen) {
-            el.webkitRequestFullscreen();
-          } else if (el.msRequestFullscreen) {
-            el.msRequestFullscreen();
-          }
-        } else if (!newFullscreenState) {
-          if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
-            if (document.exitFullscreen) {
-              document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-              document.webkitExitFullscreen();
-            } else if (document.msExitFullscreen) {
-              document.msExitFullscreen();
-            }
-          }
+    try {
+      if (!inFullscreen) {
+        if (!el) return;
+
+        if (el.requestFullscreen) {
+          await el.requestFullscreen();
+        } else if (el.webkitRequestFullscreen) {
+          el.webkitRequestFullscreen();
+        } else if (el.msRequestFullscreen) {
+          el.msRequestFullscreen();
+        } else {
+          showNotice('此裝置不支援網頁全螢幕', 'warning');
+          return;
         }
-      } catch (error) {
-        console.log('Fullscreen API error:', error);
+      } else if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
       }
-
-      document.body.style.overflow = newFullscreenState ? 'hidden' : '';
-      return { ...prev, fullscreen: newFullscreenState };
-    });
+    } catch (error) {
+      console.log('Fullscreen API error:', error);
+      showNotice('無法切換全螢幕，請改用瀏覽器原生控制', 'warning');
+    }
   };
 
   const toggleSubtitles = () => {
@@ -576,13 +587,29 @@ const VideoPlayer = ({
     }
   };
 
+  const handleSeekPreview = (_, newValue) => {
+    const nextValue = normalizeSliderValue(newValue);
+    if (!Number.isFinite(nextValue)) return;
+
+    setIsSeeking(true);
+    setSeekValue(nextValue);
+  };
+
   const handleSeek = (_, newValue) => {
     const currentPlayer = playerRef.current;
     if (!currentPlayer) return;
 
-    currentPlayer.seekTo(newValue, true);
-    syncCurrentTime(newValue);
+    const nextValue = normalizeSliderValue(newValue);
+    if (!Number.isFinite(nextValue)) return;
+
+    currentPlayer.seekTo(nextValue, true);
+    syncCurrentTime(nextValue);
+    setSeekValue(nextValue);
+    setIsSeeking(false);
+    lastPlaybackSampleRef.current = nextValue;
   };
+
+  const displayCurrentTime = isSeeking ? seekValue : playerState.currentTime;
 
   const formatTime = (seconds) => {
     if (!Number.isFinite(seconds) || seconds < 0) return '0:00:00';
@@ -602,6 +629,7 @@ const VideoPlayer = ({
     const targetTime = shouldResume ? resumePrompt.currentTime : 0;
     currentPlayer.seekTo(targetTime, true);
     syncCurrentTime(targetTime);
+    lastPlaybackSampleRef.current = targetTime;
 
     if (!shouldResume) {
       dispatch(clearVideoProgress({ videoId }));
@@ -734,24 +762,25 @@ const VideoPlayer = ({
   };
 
   return (
-    <Box
-      ref={containerRef}
-      sx={{
-        position: 'relative',
-        paddingTop: playerState.fullscreen ? '0' : '56.25%',
-        height: playerState.fullscreen ? '100vh' : '0',
-        width: playerState.fullscreen ? '100vw' : '100%',
-        bgcolor: '#000',
-        overflow: 'hidden',
-        ...(playerState.fullscreen && {
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          zIndex: 9999,
-        }),
-      }}
-      onMouseMove={handleMouseMove}
-    >
+    <Box sx={{ width: '100%' }}>
+      <Box
+        ref={containerRef}
+        sx={{
+          position: 'relative',
+          paddingTop: playerState.fullscreen ? '0' : '56.25%',
+          height: playerState.fullscreen ? '100vh' : '0',
+          width: playerState.fullscreen ? '100vw' : '100%',
+          bgcolor: '#000',
+          overflow: 'hidden',
+          ...(playerState.fullscreen && {
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            zIndex: 9999,
+          }),
+        }}
+        onMouseMove={handleMouseMove}
+      >
       {!isTouchDevice && (
         <>
           <Box
@@ -868,10 +897,10 @@ const VideoPlayer = ({
             <Box
               sx={{
                 position: 'absolute',
-                top: 0,
+                top: '16%',
                 left: 0,
-                width: '20%',
-                height: '100%',
+                width: '18%',
+                height: '52%',
                 zIndex: 3,
                 touchAction: 'none',
               }}
@@ -883,10 +912,10 @@ const VideoPlayer = ({
             <Box
               sx={{
                 position: 'absolute',
-                top: 0,
+                top: '16%',
                 right: 0,
-                width: '20%',
-                height: '100%',
+                width: '18%',
+                height: '52%',
                 zIndex: 3,
                 touchAction: 'none',
               }}
@@ -931,14 +960,9 @@ const VideoPlayer = ({
             />
 
             <Slider
-              value={playerState.currentTime}
+              value={displayCurrentTime}
               max={playerState.duration}
-              onChange={(_, newValue) => {
-                syncCurrentTime(newValue);
-                if (playerRef.current && Number.isFinite(newValue)) {
-                  playerRef.current.seekTo(newValue, true);
-                }
-              }}
+              onChange={handleSeekPreview}
               onChangeCommitted={handleSeek}
               aria-label="播放進度"
               sx={{
@@ -987,7 +1011,7 @@ const VideoPlayer = ({
               </Box>
 
               <Typography variant="body2" sx={{ color: 'white', mx: 1, whiteSpace: 'nowrap' }}>
-                {formatTime(playerState.currentTime)} / {formatTime(playerState.duration)}
+                {formatTime(displayCurrentTime)} / {formatTime(playerState.duration)}
               </Typography>
             </Box>
 
@@ -1043,6 +1067,90 @@ const VideoPlayer = ({
                   {playerState.fullscreen ? <FaCompress /> : <FaExpand />}
                 </IconButton>
               </Tooltip>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      </Box>
+
+      {isTouchDevice && (
+        <Box
+          sx={{
+            mt: playerState.fullscreen ? 0 : 1.5,
+            px: 1.5,
+            py: 1.25,
+            borderRadius: 2,
+            bgcolor: 'rgba(17,24,39,0.92)',
+            color: 'white',
+            ...(playerState.fullscreen && {
+              position: 'fixed',
+              left: 8,
+              right: 8,
+              bottom: 'calc(8px + env(safe-area-inset-bottom))',
+              zIndex: 100001,
+              borderRadius: 3,
+              bgcolor: 'rgba(17,24,39,0.78)',
+              backdropFilter: 'blur(8px)',
+            }),
+          }}
+        >
+          <Box sx={{ px: 0.5 }}>
+            <Slider
+              value={displayCurrentTime}
+              max={playerState.duration || 0}
+              onChange={handleSeekPreview}
+              onChangeCommitted={handleSeek}
+              aria-label="手機播放進度"
+              sx={{
+                mb: 0.5,
+                '& .MuiSlider-track': { bgcolor: 'primary.main' },
+                '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.2)' },
+                '& .MuiSlider-thumb': { width: 14, height: 14 },
+              }}
+            />
+          </Box>
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5, mb: 1 }}>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.78)' }}>
+              {formatTime(displayCurrentTime)} / {formatTime(playerState.duration)}
+            </Typography>
+            <Button size="small" onClick={toggleFullscreen} sx={{ minWidth: 'auto', color: 'white' }}>
+              {playerState.fullscreen ? '退出全螢幕' : '全螢幕'}
+            </Button>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }}>
+                <FaBackward />
+              </IconButton>
+              <IconButton onClick={togglePlay} sx={{ color: 'white' }}>
+                {playerState.playing ? <FaPause /> : <FaPlay />}
+              </IconButton>
+              <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }}>
+                <FaForward />
+              </IconButton>
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.75 }}>
+              {[0.5, 1, 1.25, 1.5, 2].map((rate) => (
+                <Paper
+                  key={rate}
+                  onClick={() => setPlaybackRate(rate)}
+                  sx={{
+                    px: 1,
+                    py: 0.5,
+                    cursor: 'pointer',
+                    bgcolor: playerState.playbackRate === rate ? 'primary.main' : 'rgba(255,255,255,0.08)',
+                    color: 'white',
+                    fontSize: '0.75rem',
+                    borderRadius: 1.5,
+                  }}
+                >
+                  {rate}x
+                </Paper>
+              ))}
             </Box>
           </Box>
         </Box>
