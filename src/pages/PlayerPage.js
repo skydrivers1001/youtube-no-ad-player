@@ -1,10 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Alert, Box, Typography, Container, Paper, Button, Menu, MenuItem } from '@mui/material';
-import { FaPlus } from 'react-icons/fa';
+import { Box, Typography, Container, Paper, Button, Menu, MenuItem } from '@mui/material';
+import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart } from 'react-icons/fa';
 import VideoPlayer from '../components/player/VideoPlayer';
-import { addVideoToPlaylist, addToWatchHistory, addToRecentlyPlayed } from '../store/playlistsSlice';
+import {
+  addVideoToPlaylist,
+  addToWatchHistory,
+  addToRecentlyPlayed,
+  DEFAULT_PLAYLIST_IDS,
+  toggleVideoInPlaylist,
+} from '../store/playlistsSlice';
 
 const PlayerPage = () => {
   const { videoId } = useParams();
@@ -18,6 +24,19 @@ const PlayerPage = () => {
   // 從Redux獲取設置和播放清單
   const settings = useSelector((state) => state.settings);
   const playlists = useSelector((state) => state.playlists.playlists);
+
+  const videoInfo = useMemo(() => ({
+    id: videoId,
+    title: videoTitle,
+    channel: channelName,
+    thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    duration: '未知',
+  }), [channelName, videoId, videoTitle]);
+
+  const watchLaterPlaylist = playlists.find((playlist) => playlist.id === DEFAULT_PLAYLIST_IDS.WATCH_LATER);
+  const favoritesPlaylist = playlists.find((playlist) => playlist.id === DEFAULT_PLAYLIST_IDS.FAVORITES);
+  const isInWatchLater = Boolean(watchLaterPlaylist?.videos?.some((video) => video.id === videoId));
+  const isInFavorites = Boolean(favoritesPlaylist?.videos?.some((video) => video.id === videoId));
   
   // 播放清單選單狀態
   const [anchorEl, setAnchorEl] = useState(null);
@@ -32,17 +51,10 @@ const PlayerPage = () => {
   // 當 videoId 改變時記錄觀看歷史（避免重複記錄）
   useEffect(() => {
     if (videoId && videoTitle) {
-      const videoInfo = {
-        id: videoId,
-        title: videoTitle,
-        channel: channelName,
-        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      };
-      
       dispatch(addToRecentlyPlayed(videoInfo));
       dispatch(addToWatchHistory(videoInfo));
     }
-  }, [videoId, videoTitle, channelName, dispatch]);
+  }, [dispatch, videoId, videoTitle, videoInfo]);
   
   // 處理添加到播放清單
   const handleAddToPlaylist = (event) => {
@@ -54,16 +66,12 @@ const PlayerPage = () => {
   };
   
   const handleAddToSpecificPlaylist = (playlistId) => {
-    const videoInfo = {
-      id: videoId,
-      title: videoTitle,
-      channel: channelName,
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      duration: '未知', // 實際應用中應該從API獲取
-    };
-    
     dispatch(addVideoToPlaylist({ playlistId, video: videoInfo }));
     handleMenuClose();
+  };
+
+  const handleToggleQuickPlaylist = (playlistId) => {
+    dispatch(toggleVideoInPlaylist({ playlistId, video: videoInfo }));
   };
   
   // 睡眠定時器
@@ -92,11 +100,8 @@ const PlayerPage = () => {
         
         {/* 影片信息 */}
         <Box sx={{ p: 2 }}>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            手機端播放器會優先使用 YouTube 原生控制列，以提高背景播放與小窗播放的可用性；實際支援度仍取決於瀏覽器與系統限制。
-          </Alert>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ flex: '1 1 320px', minWidth: 0 }}>
               <Typography variant="h5" gutterBottom>
                 {videoTitle}
               </Typography>
@@ -105,13 +110,33 @@ const PlayerPage = () => {
               </Typography>
             </Box>
             
-            <Button
-              variant="outlined"
-              startIcon={<FaPlus />}
-              onClick={handleAddToPlaylist}
-            >
-              加入播放清單
-            </Button>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+              <Button
+                variant={isInWatchLater ? 'contained' : 'outlined'}
+                color={isInWatchLater ? 'warning' : 'inherit'}
+                startIcon={isInWatchLater ? <FaClock /> : <FaRegClock />}
+                onClick={() => handleToggleQuickPlaylist(DEFAULT_PLAYLIST_IDS.WATCH_LATER)}
+              >
+                {isInWatchLater ? '已加入稍後觀看' : '稍後觀看'}
+              </Button>
+
+              <Button
+                variant={isInFavorites ? 'contained' : 'outlined'}
+                color={isInFavorites ? 'error' : 'inherit'}
+                startIcon={isInFavorites ? <FaHeart /> : <FaRegHeart />}
+                onClick={() => handleToggleQuickPlaylist(DEFAULT_PLAYLIST_IDS.FAVORITES)}
+              >
+                {isInFavorites ? '已收藏' : '收藏'}
+              </Button>
+
+              <Button
+                variant="outlined"
+                startIcon={<FaPlus />}
+                onClick={handleAddToPlaylist}
+              >
+                加入播放清單
+              </Button>
+            </Box>
             
             <Menu
               anchorEl={anchorEl}

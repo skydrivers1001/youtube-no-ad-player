@@ -1,5 +1,34 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+export const DEFAULT_PLAYLIST_IDS = {
+  WATCH_LATER: 'watch_later',
+  FAVORITES: 'favorites',
+};
+
+const getDefaultPlaylists = () => ([
+  {
+    id: DEFAULT_PLAYLIST_IDS.WATCH_LATER,
+    name: '稍後觀看',
+    videos: [],
+  },
+  {
+    id: DEFAULT_PLAYLIST_IDS.FAVORITES,
+    name: '我的收藏',
+    videos: [],
+  },
+]);
+
+const ensureDefaultPlaylists = (playlists = []) => {
+  const defaults = getDefaultPlaylists();
+  const defaultIds = new Set(defaults.map((playlist) => playlist.id));
+  const existingPlaylists = playlists.filter((playlist) => !defaultIds.has(playlist.id));
+  const mergedDefaults = defaults.map((playlist) => (
+    playlists.find((item) => item.id === playlist.id) || playlist
+  ));
+
+  return [...mergedDefaults, ...existingPlaylists];
+};
+
 // 從localStorage載入觀看歷史
 const loadWatchHistoryFromStorage = () => {
   try {
@@ -26,6 +55,7 @@ const savePlaylistsToStorage = (state) => {
     const dataToSave = {
       playlists: state.playlists,
       recentlyPlayed: state.recentlyPlayed,
+      watchHistory: state.watchHistory,
     };
     localStorage.setItem('youtuber_playlists_data', JSON.stringify(dataToSave));
   } catch (error) {
@@ -40,8 +70,9 @@ const loadPlaylistsFromStorage = () => {
     if (savedData) {
       const parsedData = JSON.parse(savedData);
       return {
-        playlists: parsedData.playlists || [],
+        playlists: ensureDefaultPlaylists(parsedData.playlists || []),
         recentlyPlayed: parsedData.recentlyPlayed || [],
+        watchHistory: parsedData.watchHistory || [],
       };
     }
   } catch (error) {
@@ -50,19 +81,9 @@ const loadPlaylistsFromStorage = () => {
   
   // 返回預設值
   return {
-    playlists: [
-      {
-        id: 'pl1',
-        name: '我的收藏',
-        videos: [],
-      },
-      {
-        id: 'pl2',
-        name: '學習資源',
-        videos: [],
-      },
-    ],
+    playlists: ensureDefaultPlaylists([]),
     recentlyPlayed: [],
+    watchHistory: [],
   };
 };
 
@@ -71,9 +92,9 @@ const playlistsData = loadPlaylistsFromStorage();
 const watchHistoryData = loadWatchHistoryFromStorage();
 
 const initialState = {
-  playlists: playlistsData.playlists || [],
+  playlists: ensureDefaultPlaylists(playlistsData.playlists || []),
   recentlyPlayed: playlistsData.recentlyPlayed || [],
-  watchHistory: watchHistoryData,
+  watchHistory: playlistsData.watchHistory?.length ? playlistsData.watchHistory : watchHistoryData,
   googlePlaylists: [],
   googleWatchHistory: [],
   playlistVideos: {},
@@ -142,6 +163,7 @@ export const playlistsSlice = createSlice({
       
       // 儲存到localStorage
       saveWatchHistoryToStorage(state.watchHistory);
+      savePlaylistsToStorage(state);
     },
     removePlaylist: (state, action) => {
       state.playlists = state.playlists.filter(playlist => playlist.id !== action.payload);
@@ -169,6 +191,25 @@ export const playlistsSlice = createSlice({
           savePlaylistsToStorage(state);
         }
       }
+    },
+    toggleVideoInPlaylist: (state, action) => {
+      const { playlistId, video } = action.payload;
+      const playlist = state.playlists.find((item) => item.id === playlistId);
+      if (!playlist) {
+        return;
+      }
+
+      const existingIndex = playlist.videos.findIndex((item) => item.id === video.id);
+      if (existingIndex >= 0) {
+        playlist.videos.splice(existingIndex, 1);
+      } else {
+        playlist.videos.unshift({
+          ...video,
+          addedAt: new Date().toISOString(),
+        });
+      }
+
+      savePlaylistsToStorage(state);
     },
     removeVideoFromPlaylist: (state, action) => {
       const { playlistId, videoId } = action.payload;
@@ -214,6 +255,7 @@ export const playlistsSlice = createSlice({
       if (state.watchHistory.length > 100) {
         state.watchHistory = state.watchHistory.slice(0, 100);
       }
+      saveWatchHistoryToStorage(state.watchHistory);
       savePlaylistsToStorage(state);
     },
     clearWatchHistory: (state, action) => {
@@ -225,11 +267,13 @@ export const playlistsSlice = createSlice({
         // 清除本地歷史，保留 Google 歷史
         state.watchHistory = state.watchHistory.filter(video => video.isFromGoogle);
       }
+      saveWatchHistoryToStorage(state.watchHistory);
       savePlaylistsToStorage(state);
     },
     clearAllWatchHistory: (state) => {
       // 清除所有觀看歷史（包括本地和 Google）
       state.watchHistory = [];
+      saveWatchHistoryToStorage(state.watchHistory);
       savePlaylistsToStorage(state);
     },
   },
@@ -240,6 +284,7 @@ export const {
   removePlaylist,
   renamePlaylist,
   addVideoToPlaylist,
+  toggleVideoInPlaylist,
   removeVideoFromPlaylist,
   addToRecentlyPlayed,
   addToWatchHistory,

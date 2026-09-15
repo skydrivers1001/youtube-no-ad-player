@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Alert, Box, IconButton, Slider, Typography, Paper, Tooltip } from '@mui/material';
+import { Alert, Box, Button, IconButton, Slider, Typography, Paper, Tooltip } from '@mui/material';
 import {
   FaPlay,
   FaPause,
@@ -15,7 +15,12 @@ import {
 } from 'react-icons/fa';
 import YouTube from 'react-youtube';
 import usePictureInPicture from '../../hooks/usePictureInPicture';
-import { updateVideoProgress, selectVideoProgress, markVideoCompleted } from '../../store/progressSlice';
+import {
+  updateVideoProgress,
+  selectVideoProgress,
+  markVideoCompleted,
+  clearVideoProgress,
+} from '../../store/progressSlice';
 import { recordDataUsage } from '../../store/statisticsSlice';
 
 const NOTICE_AUTO_HIDE_MS = 3500;
@@ -49,9 +54,26 @@ const VideoPlayer = ({
 
   const [showControls, setShowControls] = useState(true);
   const [playbackNotice, setPlaybackNotice] = useState(null);
+  const [resumePrompt, setResumePrompt] = useState(null);
+  const [playerBrightness, setPlayerBrightness] = useState(1);
   const controlsTimeoutRef = useRef(null);
   const noticeTimeoutRef = useRef(null);
   const backgroundPausedRef = useRef(false);
+  const touchGestureRef = useRef({
+    leftLastTapAt: 0,
+    rightLastTapAt: 0,
+    activeSide: null,
+    startX: 0,
+    startY: 0,
+    startValue: 0,
+    moved: false,
+    gestureType: null,
+  });
+  const backgroundTransitionRef = useRef({
+    announced: false,
+    usedBackgroundPlay: false,
+    wasPlaying: false,
+  });
   const dataUsageIntervalRef = useRef(null);
 
   const ENABLE_CONTROL_AUTO_HIDE = false;
@@ -90,6 +112,11 @@ const VideoPlayer = ({
       }
     };
   }, []);
+
+  useEffect(() => {
+    setResumePrompt(null);
+    setPlayerBrightness(1);
+  }, [videoId]);
 
   // 同步監聽 Fullscreen 變化（避免使用者透過 ESC 或系統手勢退出時狀態不同步）
   useEffect(() => {
@@ -171,7 +198,7 @@ const VideoPlayer = ({
     height: '100%',
     width: '100%',
     playerVars: {
-      autoplay: autoplay ? 1 : 0,
+        autoplay: autoplay && !(savedProgress?.currentTime > 5) ? 1 : 0,
       controls: isTouchDevice ? 1 : 0,
       rel: 0,
       showinfo: 0,
@@ -184,6 +211,7 @@ const VideoPlayer = ({
   }), [
     autoplay,
     isTouchDevice,
+      savedProgress?.currentTime,
     settings.defaultSubtitleLanguage,
     settings.defaultSubtitlesEnabled,
   ]);
@@ -225,6 +253,8 @@ const VideoPlayer = ({
     }));
   }, [updatePlaybackState]);
 
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
   const seekRelative = useCallback((seconds) => {
     const currentPlayer = playerRef.current;
     if (!currentPlayer) return;
@@ -235,7 +265,7 @@ const VideoPlayer = ({
     syncCurrentTime(newTime);
   }, [syncCurrentTime]);
 
-  const handleReady = useCallback((event) => {
+    const handleReady = useCallback((event) => {
     const ytPlayer = event.target;
     setPlayer(ytPlayer);
     playerRef.current = ytPlayer;
@@ -247,13 +277,17 @@ const VideoPlayer = ({
     }
 
     if (savedProgress && savedProgress.currentTime > 5) {
-      ytPlayer.seekTo(savedProgress.currentTime, true);
+        setResumePrompt({
+          currentTime: savedProgress.currentTime,
+          duration: savedProgress.duration,
+          shouldAutoplay: autoplay,
+        });
     }
 
     if (onReady) {
       onReady(ytPlayer);
     }
-  }, [dispatch, onReady, savedProgress, videoId]);
+    }, [autoplay, dispatch, onReady, savedProgress, videoId]);
 
   const handleStateChange = useCallback((event) => {
     const ytPlayer = event.target;
@@ -324,11 +358,24 @@ const VideoPlayer = ({
   useEffect(() => {
     if (!player) return;
 
+    const handleWindowBlur = () => {
+      if (!settings.enableBackgroundPlay || isPipActive) return;
+      if (!playerStateRef.current.playing || document.hidden) return;
+      if (backgroundTransitionRef.current.announced) return;
+
+      backgroundTransitionRef.current.announced = true;
+      showNotice('即將切到背景，若瀏覽器支援會持續播放', 'info');
+    };
+
     const handleVisibilityChange = () => {
       const currentPlayer = playerRef.current;
       if (!currentPlayer) return;
 
       if (document.hidden) {
+        backgroundTransitionRef.current.wasPlaying = playerStateRef.current.playing;
+        backgroundTransitionRef.current.usedBackgroundPlay =
+          settings.enableBackgroundPlay && playerStateRef.current.playing && !isPipActive;
+
         if (!settings.enableBackgroundPlay && playerStateRef.current.playing) {
           currentPlayer.pauseVideo();
           backgroundPausedRef.current = true;
@@ -340,14 +387,27 @@ const VideoPlayer = ({
         currentPlayer.playVideo();
         backgroundPausedRef.current = false;
         showNotice('已回到前景並恢復播放', 'success');
+      } else if (
+        backgroundTransitionRef.current.usedBackgroundPlay &&
+        backgroundTransitionRef.current.wasPlaying
+      ) {
+        showNotice('背景播放已恢復', 'success');
       }
+
+      backgroundTransitionRef.current = {
+        announced: false,
+        usedBackgroundPlay: false,
+        wasPlaying: false,
+      };
     };
 
+    window.addEventListener('blur', handleWindowBlur);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
+      window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [player, settings.enableBackgroundPlay, showNotice]);
+  }, [isPipActive, player, settings.enableBackgroundPlay, showNotice]);
 
   useEffect(() => {
     if (!player || !('mediaSession' in navigator)) {
@@ -533,6 +593,28 @@ const VideoPlayer = ({
     return `${hrs}:${pad2(mins)}:${pad2(secs)}`;
   };
 
+  const handleResumeChoice = (shouldResume) => {
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer || !resumePrompt) {
+      return;
+    }
+
+    const targetTime = shouldResume ? resumePrompt.currentTime : 0;
+    currentPlayer.seekTo(targetTime, true);
+    syncCurrentTime(targetTime);
+
+    if (!shouldResume) {
+      dispatch(clearVideoProgress({ videoId }));
+    }
+
+    if (resumePrompt.shouldAutoplay) {
+      currentPlayer.playVideo();
+    }
+
+    setResumePrompt(null);
+    showNotice(shouldResume ? `從 ${formatTime(targetTime)} 繼續播放` : '已從頭開始播放', 'success');
+  };
+
   const handleDoubleClick = (side) => {
     if (side === 'left') {
       seekRelative(-10);
@@ -564,6 +646,91 @@ const VideoPlayer = ({
     if (!result?.ok) {
       showNotice('無法切換畫中畫模式，請改用瀏覽器原生控制', 'warning');
     }
+  };
+
+  const handleTouchGestureStart = (side, event) => {
+    const touch = event.touches?.[0];
+    if (!touch) {
+      return;
+    }
+
+    touchGestureRef.current = {
+      ...touchGestureRef.current,
+      activeSide: side,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startValue: side === 'right' ? playerStateRef.current.volume : playerBrightness,
+      moved: false,
+      gestureType: null,
+    };
+  };
+
+  const handleTouchGestureMove = (side, event) => {
+    const currentPlayer = playerRef.current;
+    const touch = event.touches?.[0];
+    if (!currentPlayer || !touch || touchGestureRef.current.activeSide !== side) {
+      return;
+    }
+
+    const deltaY = touch.clientY - touchGestureRef.current.startY;
+    const deltaX = touch.clientX - touchGestureRef.current.startX;
+    if (Math.abs(deltaY) < 12 || Math.abs(deltaY) < Math.abs(deltaX)) {
+      return;
+    }
+
+    touchGestureRef.current.moved = true;
+    touchGestureRef.current.gestureType = side === 'right' ? 'volume' : 'brightness';
+    const containerHeight = containerRef.current?.clientHeight || window.innerHeight || 1;
+    const ratio = -deltaY / containerHeight;
+
+    if (side === 'right') {
+      const nextVolume = clamp(Math.round(touchGestureRef.current.startValue + ratio * 120), 0, 100);
+      currentPlayer.setVolume(nextVolume);
+      if (nextVolume === 0) {
+        currentPlayer.mute();
+      } else {
+        currentPlayer.unMute();
+      }
+      updatePlaybackState((prev) => ({
+        ...prev,
+        volume: nextVolume,
+        muted: nextVolume === 0,
+      }));
+    } else {
+      setPlayerBrightness(clamp(Number((touchGestureRef.current.startValue + ratio * 1.2).toFixed(2)), 0.45, 1.25));
+    }
+  };
+
+  const handleTouchGestureEnd = (side) => {
+    const gesture = touchGestureRef.current;
+    if (gesture.activeSide !== side) {
+      return;
+    }
+
+    if (gesture.moved) {
+      if (gesture.gestureType === 'volume') {
+        showNotice(`音量 ${Math.round(playerStateRef.current.muted ? 0 : playerStateRef.current.volume)}%`, 'info');
+      } else if (gesture.gestureType === 'brightness') {
+        showNotice(`亮度 ${Math.round(playerBrightness * 100)}%`, 'info');
+      }
+    } else {
+      const now = Date.now();
+      const tapKey = side === 'left' ? 'leftLastTapAt' : 'rightLastTapAt';
+      if (now - gesture[tapKey] < 280) {
+        seekRelative(side === 'left' ? -10 : 10);
+        showNotice(side === 'left' ? '快退 10 秒' : '快進 10 秒', 'info');
+        touchGestureRef.current[tapKey] = 0;
+      } else {
+        touchGestureRef.current[tapKey] = now;
+      }
+    }
+
+    touchGestureRef.current = {
+      ...touchGestureRef.current,
+      activeSide: null,
+      moved: false,
+      gestureType: null,
+    };
   };
 
   return (
@@ -635,6 +802,8 @@ const VideoPlayer = ({
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
+            filter: `brightness(${playerBrightness})`,
+            transition: 'filter 0.2s ease',
         }}
       >
         <YouTube
@@ -665,24 +834,68 @@ const VideoPlayer = ({
         </Box>
       )}
 
-      {isTouchDevice && (
-        <Box
-          sx={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            px: 1.5,
-            py: 1,
-            background: 'linear-gradient(transparent, rgba(0,0,0,0.6))',
-            zIndex: 2,
-          }}
-        >
-          <Typography variant="caption" sx={{ color: 'white' }}>
-            手機端已改用 YouTube 原生控制列，較利於背景播放與小窗功能。
-          </Typography>
-        </Box>
-      )}
+        {resumePrompt && (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: 12,
+              right: 12,
+              bottom: isTouchDevice ? 12 : 24,
+              zIndex: playerState.fullscreen ? 100001 : 4,
+            }}
+          >
+            <Alert
+              severity="info"
+              action={(
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button color="inherit" size="small" onClick={() => handleResumeChoice(false)}>
+                    從頭播放
+                  </Button>
+                  <Button color="inherit" size="small" variant="outlined" onClick={() => handleResumeChoice(true)}>
+                    從 {formatTime(resumePrompt.currentTime)} 繼續
+                  </Button>
+                </Box>
+              )}
+              sx={{ alignItems: 'center' }}
+            >
+              上次看到 {formatTime(resumePrompt.currentTime)}，要從那裡繼續嗎？
+            </Alert>
+          </Box>
+        )}
+
+        {isTouchDevice && (
+          <>
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '20%',
+                height: '100%',
+                zIndex: 3,
+                touchAction: 'none',
+              }}
+              onTouchStart={(event) => handleTouchGestureStart('left', event)}
+              onTouchMove={(event) => handleTouchGestureMove('left', event)}
+              onTouchEnd={() => handleTouchGestureEnd('left')}
+            />
+
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                width: '20%',
+                height: '100%',
+                zIndex: 3,
+                touchAction: 'none',
+              }}
+              onTouchStart={(event) => handleTouchGestureStart('right', event)}
+              onTouchMove={(event) => handleTouchGestureMove('right', event)}
+              onTouchEnd={() => handleTouchGestureEnd('right')}
+            />
+          </>
+        )}
 
       {!isTouchDevice && showControls && (
         <Box

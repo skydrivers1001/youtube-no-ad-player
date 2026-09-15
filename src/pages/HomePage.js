@@ -1,6 +1,22 @@
 import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
-import { Box, Typography, Container, Grid, TextField, Button, InputAdornment, Paper, Card, CardContent, Fade, Grow } from '@mui/material';
+import {
+  Box,
+  Typography,
+  Container,
+  Grid,
+  TextField,
+  Button,
+  InputAdornment,
+  Paper,
+  Card,
+  CardContent,
+  CardMedia,
+  CardActionArea,
+  LinearProgress,
+  Fade,
+  Grow,
+} from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import { FaYoutube, FaPlay, FaList, FaSearch } from 'react-icons/fa';
 import TrafficDisplay from '../components/statistics/TrafficDisplay';
@@ -10,6 +26,30 @@ const HomePage = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const settings = useSelector((state) => state.settings);
+  const recentlyPlayed = useSelector((state) => state.playlists.recentlyPlayed);
+  const watchHistory = useSelector((state) => state.playlists.watchHistory);
+  const progressMap = useSelector((state) => state.progress.videoProgress);
+
+  const videoMetaMap = [...recentlyPlayed, ...watchHistory].reduce((accumulator, video) => {
+    if (!accumulator[video.id]) {
+      accumulator[video.id] = video;
+    }
+    return accumulator;
+  }, {});
+
+  const continueWatching = Object.entries(progressMap)
+    .map(([id, progress]) => ({
+      id,
+      ...videoMetaMap[id],
+      ...progress,
+      thumbnail: videoMetaMap[id]?.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+      title: videoMetaMap[id]?.title || '繼續觀看',
+      channel: videoMetaMap[id]?.channel || 'YouTube',
+    }))
+    .sort((a, b) => new Date(b.lastWatched) - new Date(a.lastWatched))
+    .slice(0, 4);
+
+  const recentVideos = recentlyPlayed.slice(0, 6);
   
   // 從 YouTube URL 提取影片 ID
   const extractVideoId = (url) => {
@@ -56,6 +96,21 @@ const HomePage = () => {
     } else {
       setError('無效的 YouTube 影片網址');
     }
+  };
+
+  const formatShortTime = (seconds) => {
+    if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+      return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const goToVideo = (video) => {
+    navigate(`/watch/${video.id}?title=${encodeURIComponent(video.title || '影片')}&channel=${encodeURIComponent(video.channel || '頻道')}`);
   };
   
   return (
@@ -257,6 +312,136 @@ const HomePage = () => {
             </Box>
           </Paper>
         </Grow>
+
+        {(continueWatching.length > 0 || recentVideos.length > 0) && (
+          <Grow in timeout={1450}>
+            <Box sx={{ mb: 6 }}>
+              <Grid container spacing={3}>
+                {continueWatching.length > 0 && (
+                  <Grid item xs={12} md={6}>
+                    <Paper
+                      elevation={18}
+                      sx={{
+                        p: 3,
+                        height: '100%',
+                        borderRadius: 4,
+                        background: 'rgba(255,255,255,0.92)',
+                        backdropFilter: 'blur(18px)',
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 2 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 700, color: '#2c3e50' }}>
+                          繼續觀看
+                        </Typography>
+                        <Button component={Link} to="/playlists" size="small">
+                          查看歷史
+                        </Button>
+                      </Box>
+
+                      <Grid container spacing={2}>
+                        {continueWatching.map((video) => (
+                          <Grid item xs={12} sm={6} key={video.id}>
+                            <Card sx={{ borderRadius: 3, height: '100%' }}>
+                              <CardActionArea onClick={() => goToVideo(video)}>
+                                <Box sx={{ position: 'relative', pt: '56.25%' }}>
+                                  <CardMedia
+                                    component="img"
+                                    image={video.thumbnail}
+                                    alt={video.title}
+                                    sx={{
+                                      position: 'absolute',
+                                      inset: 0,
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover',
+                                    }}
+                                  />
+                                </Box>
+                                <CardContent>
+                                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+                                    {video.title}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary" noWrap sx={{ mb: 1 }}>
+                                    {video.channel}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                    已看 {formatShortTime(video.currentTime)} / {formatShortTime(video.duration)}
+                                  </Typography>
+                                  <LinearProgress
+                                    variant="determinate"
+                                    value={Math.max(0, Math.min(100, video.percentage || 0))}
+                                    sx={{ height: 8, borderRadius: 999 }}
+                                  />
+                                </CardContent>
+                              </CardActionArea>
+                            </Card>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                )}
+
+                {recentVideos.length > 0 && (
+                  <Grid item xs={12} md={6}>
+                    <Paper
+                      elevation={18}
+                      sx={{
+                        p: 3,
+                        height: '100%',
+                        borderRadius: 4,
+                        background: 'rgba(255,255,255,0.92)',
+                        backdropFilter: 'blur(18px)',
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 2 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 700, color: '#2c3e50' }}>
+                          最近播放
+                        </Typography>
+                        <Button component={Link} to="/playlists" size="small">
+                          查看全部
+                        </Button>
+                      </Box>
+
+                      <Grid container spacing={2}>
+                        {recentVideos.map((video) => (
+                          <Grid item xs={12} sm={6} key={`${video.id}_${video.playedAt || video.watchedAt || video.id}`}>
+                            <Card sx={{ borderRadius: 3, height: '100%' }}>
+                              <CardActionArea onClick={() => goToVideo(video)}>
+                                <Box sx={{ position: 'relative', pt: '56.25%' }}>
+                                  <CardMedia
+                                    component="img"
+                                    image={video.thumbnail}
+                                    alt={video.title}
+                                    sx={{
+                                      position: 'absolute',
+                                      inset: 0,
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover',
+                                    }}
+                                  />
+                                </Box>
+                                <CardContent>
+                                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+                                    {video.title}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary" noWrap>
+                                    {video.channel}
+                                  </Typography>
+                                </CardContent>
+                              </CardActionArea>
+                            </Card>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                )}
+              </Grid>
+            </Box>
+          </Grow>
+        )}
         
         {/* Feature Introduction Section - 宣傳區塊 */}
         <Fade in timeout={1600}>
