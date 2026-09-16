@@ -146,6 +146,21 @@ const SettingsPage = () => {
               桌面端支援文件小窗時可直接開啟；手機端請優先使用 YouTube 原生控制列或瀏覽器內建小窗功能。
             </Typography>
           </Box>
+
+          <Box sx={{ mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={settings.enableTouchGestures}
+                  onChange={(e) => handleSettingChange('enableTouchGestures', e.target.checked)}
+                />
+              }
+              label="啟用手機手勢控制"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
+              預設關閉，避免干擾 YouTube 原生按鈕；開啟後可使用左右雙擊快進快退與上下滑動調整。
+            </Typography>
+          </Box>
           
           <Box sx={{ mb: 2 }}>
             <FormControlLabel

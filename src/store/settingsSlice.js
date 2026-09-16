@@ -10,6 +10,7 @@ const defaultSettings = {
   autoplayVideos: true,
   enableBackgroundPlay: true,
   enablePictureInPicture: true,
+  enableTouchGestures: false,
   sleepTimerMinutes: 0,
   showTrafficStats: true, // 顯示流量統計，預設開啟
 };

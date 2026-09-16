@@ -892,16 +892,16 @@ const VideoPlayer = ({
           </Box>
         )}
 
-        {isTouchDevice && (
+          {isTouchDevice && settings.enableTouchGestures && (
           <>
             <Box
               sx={{
                 position: 'absolute',
-                top: '16%',
-                left: 0,
-                width: '18%',
-                height: '52%',
-                zIndex: 3,
+                  top: '22%',
+                  left: '10%',
+                  width: '12%',
+                  height: '36%',
+                  zIndex: 2,
                 touchAction: 'none',
               }}
               onTouchStart={(event) => handleTouchGestureStart('left', event)}
@@ -912,11 +912,11 @@ const VideoPlayer = ({
             <Box
               sx={{
                 position: 'absolute',
-                top: '16%',
-                right: 0,
-                width: '18%',
-                height: '52%',
-                zIndex: 3,
+                  top: '22%',
+                  right: '10%',
+                  width: '12%',
+                  height: '36%',
+                  zIndex: 2,
                 touchAction: 'none',
               }}
               onTouchStart={(event) => handleTouchGestureStart('right', event)}
