@@ -869,7 +869,9 @@ const VideoPlayer = ({
               position: 'absolute',
               left: 12,
               right: 12,
-              bottom: isTouchDevice ? 12 : 24,
+                bottom: isTouchDevice
+                  ? (playerState.fullscreen ? 'calc(108px + env(safe-area-inset-bottom))' : 96)
+                  : 24,
               zIndex: playerState.fullscreen ? 100001 : 4,
             }}
           >
@@ -1071,90 +1073,83 @@ const VideoPlayer = ({
           </Box>
         </Box>
       )}
+        {isTouchDevice && (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              px: 1.5,
+              pt: 1.25,
+              pb: 'calc(10px + env(safe-area-inset-bottom))',
+              background: 'linear-gradient(transparent, rgba(17,24,39,0.9) 24%, rgba(17,24,39,0.98))',
+              color: 'white',
+              zIndex: playerState.fullscreen ? 100000 : 3,
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            <Box sx={{ px: 0.5 }}>
+              <Slider
+                value={displayCurrentTime}
+                max={playerState.duration || 0}
+                onChange={handleSeekPreview}
+                onChangeCommitted={handleSeek}
+                aria-label="手機播放進度"
+                sx={{
+                  mb: 0.5,
+                  '& .MuiSlider-track': { bgcolor: 'primary.main' },
+                  '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.2)' },
+                  '& .MuiSlider-thumb': { width: 14, height: 14 },
+                }}
+              />
+            </Box>
 
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5, mb: 1 }}>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.78)' }}>
+                {formatTime(displayCurrentTime)} / {formatTime(playerState.duration)}
+              </Typography>
+              <Button size="small" onClick={toggleFullscreen} sx={{ minWidth: 'auto', color: 'white' }}>
+                {playerState.fullscreen ? '退出全螢幕' : '全螢幕'}
+              </Button>
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }}>
+                  <FaBackward />
+                </IconButton>
+                <IconButton onClick={togglePlay} sx={{ color: 'white' }}>
+                  {playerState.playing ? <FaPause /> : <FaPlay />}
+                </IconButton>
+                <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }}>
+                  <FaForward />
+                </IconButton>
+              </Box>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.75 }}>
+                {[0.5, 1, 1.25, 1.5, 2].map((rate) => (
+                  <Paper
+                    key={rate}
+                    onClick={() => setPlaybackRate(rate)}
+                    sx={{
+                      px: 1,
+                      py: 0.5,
+                      cursor: 'pointer',
+                      bgcolor: playerState.playbackRate === rate ? 'primary.main' : 'rgba(255,255,255,0.08)',
+                      color: 'white',
+                      fontSize: '0.75rem',
+                      borderRadius: 1.5,
+                    }}
+                  >
+                    {rate}x
+                  </Paper>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+        )}
       </Box>
-
-      {isTouchDevice && (
-        <Box
-          sx={{
-            mt: playerState.fullscreen ? 0 : 1.5,
-            px: 1.5,
-            py: 1.25,
-            borderRadius: 2,
-            bgcolor: 'rgba(17,24,39,0.92)',
-            color: 'white',
-            ...(playerState.fullscreen && {
-              position: 'fixed',
-              left: 8,
-              right: 8,
-              bottom: 'calc(8px + env(safe-area-inset-bottom))',
-              zIndex: 100001,
-              borderRadius: 3,
-              bgcolor: 'rgba(17,24,39,0.78)',
-              backdropFilter: 'blur(8px)',
-            }),
-          }}
-        >
-          <Box sx={{ px: 0.5 }}>
-            <Slider
-              value={displayCurrentTime}
-              max={playerState.duration || 0}
-              onChange={handleSeekPreview}
-              onChangeCommitted={handleSeek}
-              aria-label="手機播放進度"
-              sx={{
-                mb: 0.5,
-                '& .MuiSlider-track': { bgcolor: 'primary.main' },
-                '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.2)' },
-                '& .MuiSlider-thumb': { width: 14, height: 14 },
-              }}
-            />
-          </Box>
-
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5, mb: 1 }}>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.78)' }}>
-              {formatTime(displayCurrentTime)} / {formatTime(playerState.duration)}
-            </Typography>
-            <Button size="small" onClick={toggleFullscreen} sx={{ minWidth: 'auto', color: 'white' }}>
-              {playerState.fullscreen ? '退出全螢幕' : '全螢幕'}
-            </Button>
-          </Box>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }}>
-                <FaBackward />
-              </IconButton>
-              <IconButton onClick={togglePlay} sx={{ color: 'white' }}>
-                {playerState.playing ? <FaPause /> : <FaPlay />}
-              </IconButton>
-              <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }}>
-                <FaForward />
-              </IconButton>
-            </Box>
-
-            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.75 }}>
-              {[0.5, 1, 1.25, 1.5, 2].map((rate) => (
-                <Paper
-                  key={rate}
-                  onClick={() => setPlaybackRate(rate)}
-                  sx={{
-                    px: 1,
-                    py: 0.5,
-                    cursor: 'pointer',
-                    bgcolor: playerState.playbackRate === rate ? 'primary.main' : 'rgba(255,255,255,0.08)',
-                    color: 'white',
-                    fontSize: '0.75rem',
-                    borderRadius: 1.5,
-                  }}
-                >
-                  {rate}x
-                </Paper>
-              ))}
-            </Box>
-          </Box>
-        </Box>
-      )}
     </Box>
   );
 };
