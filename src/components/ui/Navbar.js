@@ -7,6 +7,7 @@ import UserProfile from '../auth/UserProfile';
 import GoogleAuthButton from '../auth/GoogleAuthButton';
 
 const Navbar = () => {
+  const showTopbarGoogleAuth = false;
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -174,9 +175,9 @@ const Navbar = () => {
               <UserProfile />
             </Menu>
           </>
-        ) : (
+        ) : showTopbarGoogleAuth ? (
           <GoogleAuthButton />
-        )}
+        ) : null}
       </Toolbar>
       
       <Drawer
