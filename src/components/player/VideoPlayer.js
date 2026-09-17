@@ -26,6 +26,7 @@ import { recordDataUsage } from '../../store/statisticsSlice';
 const NOTICE_AUTO_HIDE_MS = 3500;
 const ESTIMATED_MB_PER_PLAYBACK_SECOND = 0.12;
 const DATA_USAGE_BATCH_SECONDS = 15;
+const TOUCH_INLINE_CONTROLS_HEIGHT = 148;
 
 const VideoPlayer = ({
   videoId,
@@ -610,6 +611,7 @@ const VideoPlayer = ({
   };
 
   const displayCurrentTime = isSeeking ? seekValue : playerState.currentTime;
+    const hasInlineTouchControls = isTouchDevice && !playerState.fullscreen;
 
   const formatTime = (seconds) => {
     if (!Number.isFinite(seconds) || seconds < 0) return '0:00:00';
@@ -767,7 +769,11 @@ const VideoPlayer = ({
         ref={containerRef}
         sx={{
           position: 'relative',
-          paddingTop: playerState.fullscreen ? '0' : '56.25%',
+            paddingTop: playerState.fullscreen
+              ? '0'
+              : hasInlineTouchControls
+                ? `calc(56.25% + ${TOUCH_INLINE_CONTROLS_HEIGHT}px)`
+                : '56.25%',
           height: playerState.fullscreen ? '100vh' : '0',
           width: playerState.fullscreen ? '100vw' : '100%',
           bgcolor: '#000',
@@ -826,8 +832,8 @@ const VideoPlayer = ({
           position: 'absolute',
           top: 0,
           left: 0,
-          width: '100%',
-          height: '100%',
+            right: 0,
+            bottom: hasInlineTouchControls ? `${TOUCH_INLINE_CONTROLS_HEIGHT}px` : 0,
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
@@ -870,7 +876,9 @@ const VideoPlayer = ({
               left: 12,
               right: 12,
                 bottom: isTouchDevice
-                  ? (playerState.fullscreen ? 'calc(108px + env(safe-area-inset-bottom))' : 96)
+                    ? (playerState.fullscreen
+                      ? 'calc(108px + env(safe-area-inset-bottom))'
+                      : TOUCH_INLINE_CONTROLS_HEIGHT + 12)
                   : 24,
               zIndex: playerState.fullscreen ? 100001 : 4,
             }}
@@ -1083,10 +1091,14 @@ const VideoPlayer = ({
               px: 1.5,
               pt: 1.25,
               pb: 'calc(10px + env(safe-area-inset-bottom))',
-              background: 'linear-gradient(transparent, rgba(17,24,39,0.9) 24%, rgba(17,24,39,0.98))',
+                minHeight: `${TOUCH_INLINE_CONTROLS_HEIGHT}px`,
+                background: hasInlineTouchControls
+                  ? 'linear-gradient(180deg, rgba(8,12,24,0.94) 0%, rgba(12,18,32,0.98) 100%)'
+                  : 'linear-gradient(transparent, rgba(17,24,39,0.9) 24%, rgba(17,24,39,0.98))',
               color: 'white',
               zIndex: playerState.fullscreen ? 100000 : 3,
-              backdropFilter: 'blur(6px)',
+                backdropFilter: 'blur(6px)',
+                borderTop: hasInlineTouchControls ? '1px solid rgba(255,255,255,0.08)' : 'none',
             }}
           >
             <Box sx={{ px: 0.5 }}>
