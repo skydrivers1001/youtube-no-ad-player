@@ -26,7 +26,7 @@ import { recordDataUsage } from '../../store/statisticsSlice';
 const NOTICE_AUTO_HIDE_MS = 3500;
 const ESTIMATED_MB_PER_PLAYBACK_SECOND = 0.12;
 const DATA_USAGE_BATCH_SECONDS = 15;
-const TOUCH_INLINE_CONTROLS_HEIGHT = 148;
+const TOUCH_INLINE_CONTROLS_HEIGHT = 116;
 
 const VideoPlayer = ({
   videoId,
@@ -1101,29 +1101,13 @@ const VideoPlayer = ({
                 borderTop: hasInlineTouchControls ? '1px solid rgba(255,255,255,0.08)' : 'none',
             }}
           >
-            <Box sx={{ px: 0.5 }}>
-              <Slider
-                value={displayCurrentTime}
-                max={playerState.duration || 0}
-                onChange={handleSeekPreview}
-                onChangeCommitted={handleSeek}
-                aria-label="手機播放進度"
-                sx={{
-                  mb: 0.5,
-                  '& .MuiSlider-track': { bgcolor: 'primary.main' },
-                  '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.2)' },
-                  '& .MuiSlider-thumb': { width: 14, height: 14 },
-                }}
-              />
-            </Box>
-
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5, mb: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5, mb: 1 }}>
               <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.78)' }}>
                 {formatTime(displayCurrentTime)} / {formatTime(playerState.duration)}
               </Typography>
-              <Button size="small" onClick={toggleFullscreen} sx={{ minWidth: 'auto', color: 'white' }}>
-                {playerState.fullscreen ? '退出全螢幕' : '全螢幕'}
-              </Button>
+                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)' }}>
+                  請使用播放器原生全螢幕
+                </Typography>
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
