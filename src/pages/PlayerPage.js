@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Paper, Button, Menu, MenuItem } from '@mui/material';
-import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart } from 'react-icons/fa';
+import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart, FaShareAlt, FaCopy } from 'react-icons/fa';
 import VideoPlayer from '../components/player/VideoPlayer';
 import {
   addVideoToPlaylist,
@@ -73,6 +73,47 @@ const PlayerPage = () => {
   const handleToggleQuickPlaylist = (playlistId) => {
     dispatch(toggleVideoInPlaylist({ playlistId, video: videoInfo }));
   };
+
+  // 建立本站播放網址；LINE 會依 openExternalBrowser 參數改用系統瀏覽器開啟
+  const getShareUrl = () => {
+    const shareUrl = new URL(`/watch/${videoId}`, window.location.origin);
+    shareUrl.searchParams.set('title', videoTitle);
+    shareUrl.searchParams.set('channel', channelName);
+    shareUrl.searchParams.set('openExternalBrowser', '1');
+    return shareUrl.toString();
+  };
+
+  const copyShareUrl = async () => {
+    const shareUrl = getShareUrl();
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      alert('本站播放連結已複製');
+    } catch (_) {
+      window.prompt('請複製本站播放連結', shareUrl);
+    }
+  };
+
+  const handleShare = async () => {
+    const shareData = {
+      title: videoTitle,
+      text: `用 YouTube No AD Player 觀看「${videoTitle}」`,
+      url: getShareUrl(),
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      await copyShareUrl();
+    } catch (error) {
+      // 使用者關閉分享面板時不顯示錯誤
+      if (error?.name !== 'AbortError') {
+        await copyShareUrl();
+      }
+    }
+  };
   
   // 睡眠定時器
   useEffect(() => {
@@ -135,6 +176,22 @@ const PlayerPage = () => {
                 onClick={handleAddToPlaylist}
               >
                 加入播放清單
+              </Button>
+
+              <Button
+                variant="outlined"
+                startIcon={<FaShareAlt />}
+                onClick={handleShare}
+              >
+                分享本站連結
+              </Button>
+
+              <Button
+                variant="outlined"
+                startIcon={<FaCopy />}
+                onClick={copyShareUrl}
+              >
+                複製連結
               </Button>
             </Box>
             
