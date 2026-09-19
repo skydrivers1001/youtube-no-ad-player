@@ -81,6 +81,16 @@ const VideoPlayer = ({
   });
   const lastPlaybackSampleRef = useRef(0);
   const pendingUsageSecondsRef = useRef(0);
+  const initialAutoplayRef = useRef({
+    videoId,
+    enabled: autoplay && !(savedProgress?.currentTime > 5),
+  });
+  if (initialAutoplayRef.current.videoId !== videoId) {
+    initialAutoplayRef.current = {
+      videoId,
+      enabled: autoplay && !(savedProgress?.currentTime > 5),
+    };
+  }
 
   const ENABLE_CONTROL_AUTO_HIDE = false;
 
@@ -174,6 +184,29 @@ const VideoPlayer = ({
     return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
   }, [settings.defaultSubtitleLanguage, settings.defaultSubtitlesEnabled, videoId]);
 
+  const getPipCurrentTime = useCallback(() => playerRef.current?.getCurrentTime?.() || 0, []);
+  const getShouldResumePipPlayback = useCallback(() => !document.hidden, []);
+  const handlePipEnter = useCallback(({ wasPlaying }) => {
+    if (wasPlaying) {
+      playerRef.current?.pauseVideo?.();
+    }
+    showNotice('已切換到小窗播放', 'info');
+  }, [showNotice]);
+  const handlePipExit = useCallback(({ estimatedCurrentTime, resumePlaybackInSource }) => {
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) return;
+
+    currentPlayer.seekTo(estimatedCurrentTime, true);
+    if (!playerStateRef.current.muted && playerStateRef.current.volume > 0) {
+      currentPlayer.setVolume(playerStateRef.current.volume);
+      currentPlayer.unMute();
+    }
+    if (resumePlaybackInSource) {
+      currentPlayer.playVideo();
+    }
+    showNotice('已回到頁面播放器', 'success');
+  }, [showNotice]);
+
   const {
     isPipSupported,
     isPipActive,
@@ -182,33 +215,18 @@ const VideoPlayer = ({
   } = usePictureInPicture({
     enabled: settings.enablePictureInPicture,
     buildEmbedUrl,
-    getCurrentTime: () => playerRef.current?.getCurrentTime?.() || 0,
-    getShouldResumePlayback: () => !document.hidden,
-    onEnter: ({ wasPlaying }) => {
-      if (wasPlaying) {
-        playerRef.current?.pauseVideo?.();
-      }
-      showNotice('已切換到小窗播放', 'info');
-    },
-    onExit: ({ estimatedCurrentTime, resumePlaybackInSource }) => {
-      const currentPlayer = playerRef.current;
-      if (!currentPlayer) {
-        return;
-      }
-
-      currentPlayer.seekTo(estimatedCurrentTime, true);
-      if (resumePlaybackInSource) {
-        currentPlayer.playVideo();
-      }
-      showNotice('已回到頁面播放器', 'success');
-    },
+    getCurrentTime: getPipCurrentTime,
+    getShouldResumePlayback: getShouldResumePipPlayback,
+    onEnter: handlePipEnter,
+    onExit: handlePipExit,
   });
 
+  const shouldAutoplayOnLoad = initialAutoplayRef.current.enabled;
   const opts = useMemo(() => ({
     height: '100%',
     width: '100%',
     playerVars: {
-        autoplay: autoplay && !(savedProgress?.currentTime > 5) ? 1 : 0,
+        autoplay: shouldAutoplayOnLoad ? 1 : 0,
       controls: isTouchDevice ? 1 : 0,
       rel: 0,
       showinfo: 0,
@@ -219,11 +237,10 @@ const VideoPlayer = ({
       playsinline: 1,
     },
   }), [
-    autoplay,
     isTouchDevice,
-      savedProgress?.currentTime,
     settings.defaultSubtitleLanguage,
     settings.defaultSubtitlesEnabled,
+    shouldAutoplayOnLoad,
   ]);
 
   const playerStyle = useMemo(() => ({
@@ -274,6 +291,11 @@ const VideoPlayer = ({
     playerRef.current = ytPlayer;
     ytPlayer.setPlaybackRate(playerStateRef.current.playbackRate);
     ytPlayer.setVolume(playerStateRef.current.volume);
+    if (playerStateRef.current.muted || playerStateRef.current.volume === 0) {
+      ytPlayer.mute();
+    } else {
+      ytPlayer.unMute();
+    }
 
     lastPlaybackSampleRef.current = ytPlayer.getCurrentTime?.() || 0;
     pendingUsageSecondsRef.current = 0;
@@ -289,7 +311,7 @@ const VideoPlayer = ({
     if (onReady) {
       onReady(ytPlayer);
     }
-  }, [autoplay, onReady, savedProgress]);
+  }, [autoplay, onReady, savedProgress, videoId]);
 
   const handleStateChange = useCallback((event) => {
     const ytPlayer = event.target;
@@ -393,6 +415,12 @@ const VideoPlayer = ({
           backgroundPausedRef.current = true;
         }
         return;
+      }
+
+      const expectedAudioState = playerStateRef.current;
+      if (!expectedAudioState.muted && expectedAudioState.volume > 0) {
+        currentPlayer.setVolume(expectedAudioState.volume);
+        currentPlayer.unMute();
       }
 
       if (backgroundPausedRef.current) {
@@ -503,11 +531,18 @@ const VideoPlayer = ({
     const currentPlayer = playerRef.current;
     if (!currentPlayer) return;
 
-    currentPlayer.setVolume(newValue);
+    const nextVolume = normalizeSliderValue(newValue);
+    if (!Number.isFinite(nextVolume)) return;
+    currentPlayer.setVolume(nextVolume);
+    if (nextVolume === 0) {
+      currentPlayer.mute();
+    } else {
+      currentPlayer.unMute();
+    }
     updatePlaybackState((prev) => ({
       ...prev,
-      volume: newValue,
-      muted: newValue === 0,
+      volume: nextVolume,
+      muted: nextVolume === 0,
     }));
   };
 
@@ -902,7 +937,7 @@ const VideoPlayer = ({
           </Box>
         )}
 
-          {isTouchDevice && settings.enableTouchGestures && (
+          {isTouchDevice && settings.enableTouchGestures && playerState.fullscreen && (
           <>
             <Box
               sx={{
