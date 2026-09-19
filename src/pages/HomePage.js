@@ -333,7 +333,7 @@ const HomePage = () => {
                         <Typography variant="h5" sx={{ fontWeight: 700, color: '#2c3e50' }}>
                           繼續觀看
                         </Typography>
-                        <Button component={Link} to="/playlists" size="small">
+                        <Button component={Link} to="/playlists?view=history" size="small">
                           查看歷史
                         </Button>
                       </Box>
@@ -398,7 +398,7 @@ const HomePage = () => {
                         <Typography variant="h5" sx={{ fontWeight: 700, color: '#2c3e50' }}>
                           最近播放
                         </Typography>
-                        <Button component={Link} to="/playlists" size="small">
+                        <Button component={Link} to="/playlists?view=recent" size="small">
                           查看全部
                         </Button>
                       </Box>
