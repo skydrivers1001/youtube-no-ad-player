@@ -234,6 +234,24 @@ export const playlistsSlice = createSlice({
       }
       savePlaylistsToStorage(state);
     },
+    removeRecentlyPlayed: (state, action) => {
+      const videoId = action.payload;
+      state.recentlyPlayed = state.recentlyPlayed.filter(v => v.id !== videoId);
+      savePlaylistsToStorage(state);
+    },
+    removeWatchHistoryItem: (state, action) => {
+      const { id, watchedAt } = typeof action.payload === 'string'
+        ? { id: action.payload, watchedAt: null }
+        : (action.payload || {});
+      state.watchHistory = state.watchHistory.filter(video => {
+        if (watchedAt && video.watchedAt) {
+          return !(video.id === id && video.watchedAt === watchedAt);
+        }
+        return video.id !== id;
+      });
+      saveWatchHistoryToStorage(state.watchHistory);
+      savePlaylistsToStorage(state);
+    },
     addToWatchHistory: (state, action) => {
       const video = action.payload;
       // 檢查是否已存在於歷史記錄中
@@ -287,7 +305,9 @@ export const {
   toggleVideoInPlaylist,
   removeVideoFromPlaylist,
   addToRecentlyPlayed,
+  removeRecentlyPlayed,
   addToWatchHistory,
+  removeWatchHistoryItem,
   clearWatchHistory,
   clearAllWatchHistory,
   setGooglePlaylists,

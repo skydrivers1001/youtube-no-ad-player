@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Grid, Card, CardContent, CardMedia, CardActionArea, Tabs, Tab, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert, Snackbar } from '@mui/material';
 import { FaPlus, FaTrash, FaSync } from 'react-icons/fa';
-import { addPlaylist, removeVideoFromPlaylist, setGooglePlaylists, setPlaylistVideos, setGoogleWatchHistory, clearWatchHistory } from '../store/playlistsSlice';
+import { addPlaylist, removeVideoFromPlaylist, removeRecentlyPlayed, removeWatchHistoryItem, setGooglePlaylists, setPlaylistVideos, setGoogleWatchHistory, clearWatchHistory } from '../store/playlistsSlice';
 import { syncUserPlaylists, fetchUserPlaylists, fetchPlaylistVideos, fetchWatchHistory } from '../services/authService';
 import { keyframes } from '@emotion/react';
 
@@ -266,6 +266,16 @@ const PlaylistsPage = () => {
                           </Typography>
                         </CardContent>
                       </CardActionArea>
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
+                        <Button
+                          size="small"
+                          color="error"
+                          startIcon={<FaTrash />}
+                          onClick={() => dispatch(removeRecentlyPlayed(video.id))}
+                        >
+                          刪除
+                        </Button>
+                      </Box>
                     </Card>
                   </Grid>
                 ))}
@@ -351,6 +361,16 @@ const PlaylistsPage = () => {
                           </Typography>
                         </CardContent>
                       </CardActionArea>
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
+                        <Button
+                          size="small"
+                          color="error"
+                          startIcon={<FaTrash />}
+                          onClick={() => dispatch(removeWatchHistoryItem({ id: video.id, watchedAt: video.watchedAt }))}
+                        >
+                          刪除
+                        </Button>
+                      </Box>
                     </Card>
                   </Grid>
                 ))}
