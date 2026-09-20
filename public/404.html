@@ -28,9 +28,15 @@
         var l = window.location;
         var isRender = /onrender\.com$/.test(l.hostname);
         if (!isRender) return;
+        var preservedSearch = '';
+        if (l.search) {
+          preservedSearch = '&' + l.search.slice(1)
+            .replace(/&/g, '~and~')
+            .replace(/\+/g, '%2B');
+        }
         var newUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
           '/index.html?/' + l.pathname.slice(1) +
-          (l.search ? '&' + l.search.slice(1).replace(/\+/g, '%2B') : '') + l.hash;
+          preservedSearch + l.hash;
         l.replace(newUrl);
       })();
     </script>

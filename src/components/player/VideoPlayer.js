@@ -311,7 +311,7 @@ const VideoPlayer = ({
     if (onReady) {
       onReady(ytPlayer);
     }
-  }, [autoplay, onReady, savedProgress, videoId]);
+  }, [autoplay, onReady, savedProgress]);
 
   const handleStateChange = useCallback((event) => {
     const ytPlayer = event.target;

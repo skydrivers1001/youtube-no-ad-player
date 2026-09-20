@@ -89,10 +89,15 @@
       (function(l){
         try {
           if (l.search && l.search.startsWith('?/')) {
-            var decoded = l.search.slice(2).split('&').map(function(s){
-              return s.replace(/~and~/g, '&');
-            }).join('?');
-            var newPath = '/' + decoded + l.hash;
+            var decoded = l.search.slice(2).replace(/~and~/g, '&');
+            var firstQuerySeparatorIndex = decoded.indexOf('&');
+            var restoredPath = firstQuerySeparatorIndex === -1
+              ? '/' + decoded
+              : '/' + decoded.slice(0, firstQuerySeparatorIndex);
+            var restoredSearch = firstQuerySeparatorIndex === -1
+              ? ''
+              : '?' + decoded.slice(firstQuerySeparatorIndex + 1);
+            var newPath = restoredPath + restoredSearch + l.hash;
             window.history.replaceState(null, null, newPath);
           }
         } catch (e) {
