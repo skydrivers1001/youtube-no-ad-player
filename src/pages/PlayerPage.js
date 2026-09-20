@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Paper, Button, Menu, MenuItem } from '@mui/material';
 import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart, FaShareAlt, FaCopy } from 'react-icons/fa';
 import VideoPlayer from '../components/player/VideoPlayer';
+import youtubeService from '../services/youtubeService';
 import {
   addVideoToPlaylist,
   addToWatchHistory,
@@ -12,18 +13,76 @@ import {
   toggleVideoInPlaylist,
 } from '../store/playlistsSlice';
 
+const hasMeaningfulValue = (value, fallbackLabel) => Boolean(value && value !== fallbackLabel);
+
 const PlayerPage = () => {
   const { videoId } = useParams();
   const location = useLocation();
   const dispatch = useDispatch();
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   
-  // 從URL參數獲取影片信息
-  const videoTitle = new URLSearchParams(location.search).get('title') || '影片';
-  const channelName = new URLSearchParams(location.search).get('channel') || '頻道';
+  const urlVideoTitle = searchParams.get('title');
+  const urlChannelName = searchParams.get('channel');
   
   // 從Redux獲取設置和播放清單
   const settings = useSelector((state) => state.settings);
   const playlists = useSelector((state) => state.playlists.playlists);
+  const recentlyPlayed = useSelector((state) => state.playlists.recentlyPlayed);
+  const watchHistory = useSelector((state) => state.playlists.watchHistory);
+  const accessToken = useSelector((state) => state.auth?.accessToken);
+  const [fetchedVideoMeta, setFetchedVideoMeta] = useState({ title: '', channel: '' });
+
+  const cachedVideoInfo = useMemo(() => {
+    const playedVideo = recentlyPlayed.find((video) => video.id === videoId);
+    if (playedVideo) {
+      return playedVideo;
+    }
+    return watchHistory.find((video) => video.id === videoId) || null;
+  }, [recentlyPlayed, videoId, watchHistory]);
+
+  const shouldFetchVideoMeta = !hasMeaningfulValue(urlVideoTitle, '影片')
+    || !hasMeaningfulValue(urlChannelName, '頻道');
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!videoId || !shouldFetchVideoMeta) {
+      setFetchedVideoMeta({ title: '', channel: '' });
+      return undefined;
+    }
+
+    const fetchVideoMeta = async () => {
+      try {
+        const response = await youtubeService.getVideoDetails(videoId, accessToken);
+        const item = response?.data?.items?.[0];
+
+        if (!isCancelled && item) {
+          setFetchedVideoMeta({
+            title: item.title || '',
+            channel: item.channel || '',
+          });
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setFetchedVideoMeta({ title: '', channel: '' });
+        }
+      }
+    };
+
+    fetchVideoMeta();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [accessToken, shouldFetchVideoMeta, videoId]);
+
+  const videoTitle = hasMeaningfulValue(urlVideoTitle, '影片')
+    ? urlVideoTitle
+    : (cachedVideoInfo?.title || fetchedVideoMeta.title || '影片');
+
+  const channelName = hasMeaningfulValue(urlChannelName, '頻道')
+    ? urlChannelName
+    : (cachedVideoInfo?.channel || fetchedVideoMeta.channel || '頻道');
 
   const videoInfo = useMemo(() => ({
     id: videoId,

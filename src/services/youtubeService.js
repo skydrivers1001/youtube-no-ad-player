@@ -621,14 +621,48 @@ const youtubeService = {
   },
   
   // 獲取影片詳情
-  getVideoDetails: async (videoId) => {
+  getVideoDetails: async (videoId, accessToken = null) => {
+    try {
+      const response = await axios.get(
+        'https://www.googleapis.com/youtube/v3/videos',
+        {
+          params: {
+            part: 'snippet,contentDetails,statistics',
+            id: videoId,
+            ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
+          },
+          headers: getAuthHeaders(accessToken)
+        }
+      );
+
+      const formattedItems = (response.data.items || []).map(item => ({
+        id: item.id,
+        title: item.snippet.title,
+        channel: item.snippet.channelTitle,
+        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
+        duration: item.contentDetails?.duration ? formatDuration(item.contentDetails.duration) : '未知',
+        views: item.statistics?.viewCount ? formatViews(item.statistics.viewCount) + ' 次觀看' : '未知',
+        publishedAt: item.snippet.publishedAt ? formatDate(item.snippet.publishedAt) : '未知'
+      }));
+
+      if (formattedItems.length > 0) {
+        return {
+          data: {
+            items: formattedItems
+          }
+        };
+      }
+    } catch (error) {
+      console.error('YouTube API 影片詳情錯誤:', error);
+    }
+
     await delay(500);
-    
+
     const video = mockVideos.find(v => v.id === videoId);
     if (!video) {
       throw new Error('Video not found');
     }
-    
+
     return {
       data: {
         items: [video]
