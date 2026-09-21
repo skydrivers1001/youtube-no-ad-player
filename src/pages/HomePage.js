@@ -318,7 +318,7 @@ const HomePage = () => {
             <Box sx={{ mb: 6 }}>
               <Grid container spacing={3}>
                 {continueWatching.length > 0 && (
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={recentVideos.length > 0 ? 6 : 12}>
                     <Paper
                       elevation={18}
                       sx={{
@@ -340,7 +340,7 @@ const HomePage = () => {
 
                       <Grid container spacing={2}>
                         {continueWatching.map((video) => (
-                          <Grid item xs={12} sm={6} key={video.id}>
+                          <Grid item xs={12} sm={6} md={recentVideos.length > 0 ? 6 : 3} key={video.id}>
                             <Card sx={{ borderRadius: 3, height: '100%' }}>
                               <CardActionArea onClick={() => goToVideo(video)}>
                                 <Box sx={{ position: 'relative', pt: '56.25%' }}>
@@ -383,7 +383,7 @@ const HomePage = () => {
                 )}
 
                 {recentVideos.length > 0 && (
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={continueWatching.length > 0 ? 6 : 12}>
                     <Paper
                       elevation={18}
                       sx={{
@@ -405,7 +405,7 @@ const HomePage = () => {
 
                       <Grid container spacing={2}>
                         {recentVideos.map((video) => (
-                          <Grid item xs={12} sm={6} key={`${video.id}_${video.playedAt || video.watchedAt || video.id}`}>
+                          <Grid item xs={12} sm={6} md={continueWatching.length > 0 ? 6 : 3} key={`${video.id}_${video.playedAt || video.watchedAt || video.id}`}>
                             <Card sx={{ borderRadius: 3, height: '100%' }}>
                               <CardActionArea onClick={() => goToVideo(video)}>
                                 <Box sx={{ position: 'relative', pt: '56.25%' }}>
