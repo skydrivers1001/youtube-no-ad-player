@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -112,7 +112,62 @@ const HomePage = () => {
   const goToVideo = (video) => {
     navigate(`/watch/${video.id}?title=${encodeURIComponent(video.title || '影片')}&channel=${encodeURIComponent(video.channel || '頻道')}`);
   };
-  
+
+  const homeVideoSectionGridSx = {
+    display: 'grid',
+    gridTemplateColumns: {
+      xs: '1fr',
+      lg: 'repeat(2, minmax(0, 1fr))',
+    },
+    gap: 3,
+  };
+
+  const homeVideoCardGridSx = {
+    display: 'grid',
+    gridTemplateColumns: {
+      xs: 'repeat(auto-fit, 220px)',
+      sm: 'repeat(auto-fit, 228px)',
+      lg: 'repeat(auto-fit, 240px)',
+    },
+    gap: 2,
+    justifyContent: 'flex-start',
+    overflowX: 'hidden',
+  };
+
+  const homeVideoCardSx = {
+    borderRadius: 3,
+    height: '100%',
+    width: '100%',
+    minWidth: 0,
+  };
+
+  const homeVideoCardMediaWrapperSx = {
+    position: 'relative',
+    aspectRatio: '16 / 9',
+    width: '100%',
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  };
+
+  const homeVideoCardMediaSx = {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  };
+
+  const homeVideoTitleSx = {
+    fontWeight: 600,
+    lineHeight: 1.35,
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical',
+    WebkitLineClamp: 2,
+    overflow: 'hidden',
+    minHeight: '2.7em',
+  };
+
   return (
     <Box
       sx={{
@@ -316,9 +371,9 @@ const HomePage = () => {
         {(continueWatching.length > 0 || recentVideos.length > 0) && (
           <Grow in timeout={1450}>
             <Box sx={{ mb: 6 }}>
-              <Grid container spacing={3}>
+              <Box sx={homeVideoSectionGridSx}>
                 {continueWatching.length > 0 && (
-                  <Grid item xs={12} md={recentVideos.length > 0 ? 6 : 12}>
+                  <Box sx={{ minWidth: 0 }}>
                     <Paper
                       elevation={18}
                       sx={{
@@ -338,27 +393,21 @@ const HomePage = () => {
                         </Button>
                       </Box>
 
-                      <Grid container spacing={2}>
+                      <Box sx={homeVideoCardGridSx}>
                         {continueWatching.map((video) => (
-                          <Grid item xs={12} sm={6} md={recentVideos.length > 0 ? 6 : 3} key={video.id}>
-                            <Card sx={{ borderRadius: 3, height: '100%' }}>
+                          <Box key={video.id} sx={{ minWidth: 0 }}>
+                            <Card sx={homeVideoCardSx}>
                               <CardActionArea onClick={() => goToVideo(video)}>
-                                <Box sx={{ position: 'relative', pt: '56.25%' }}>
+                                <Box sx={homeVideoCardMediaWrapperSx}>
                                   <CardMedia
                                     component="img"
                                     image={video.thumbnail}
                                     alt={video.title}
-                                    sx={{
-                                      position: 'absolute',
-                                      inset: 0,
-                                      width: '100%',
-                                      height: '100%',
-                                      objectFit: 'cover',
-                                    }}
+                                    sx={homeVideoCardMediaSx}
                                   />
                                 </Box>
                                 <CardContent>
-                                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+                                  <Typography variant="subtitle1" sx={homeVideoTitleSx}>
                                     {video.title}
                                   </Typography>
                                   <Typography variant="body2" color="text.secondary" noWrap sx={{ mb: 1 }}>
@@ -375,15 +424,15 @@ const HomePage = () => {
                                 </CardContent>
                               </CardActionArea>
                             </Card>
-                          </Grid>
+                          </Box>
                         ))}
-                      </Grid>
+                      </Box>
                     </Paper>
-                  </Grid>
+                  </Box>
                 )}
 
                 {recentVideos.length > 0 && (
-                  <Grid item xs={12} md={continueWatching.length > 0 ? 6 : 12}>
+                  <Box sx={{ minWidth: 0 }}>
                     <Paper
                       elevation={18}
                       sx={{
@@ -403,27 +452,24 @@ const HomePage = () => {
                         </Button>
                       </Box>
 
-                      <Grid container spacing={2}>
+                      <Box sx={homeVideoCardGridSx}>
                         {recentVideos.map((video) => (
-                          <Grid item xs={12} sm={6} md={continueWatching.length > 0 ? 6 : 3} key={`${video.id}_${video.playedAt || video.watchedAt || video.id}`}>
-                            <Card sx={{ borderRadius: 3, height: '100%' }}>
+                          <Box
+                            key={`${video.id}_${video.playedAt || video.watchedAt || video.id}`}
+                            sx={{ minWidth: 0 }}
+                          >
+                            <Card sx={homeVideoCardSx}>
                               <CardActionArea onClick={() => goToVideo(video)}>
-                                <Box sx={{ position: 'relative', pt: '56.25%' }}>
+                                <Box sx={homeVideoCardMediaWrapperSx}>
                                   <CardMedia
                                     component="img"
                                     image={video.thumbnail}
                                     alt={video.title}
-                                    sx={{
-                                      position: 'absolute',
-                                      inset: 0,
-                                      width: '100%',
-                                      height: '100%',
-                                      objectFit: 'cover',
-                                    }}
+                                      sx={homeVideoCardMediaSx}
                                   />
                                 </Box>
                                 <CardContent>
-                                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+                                  <Typography variant="subtitle1" sx={homeVideoTitleSx}>
                                     {video.title}
                                   </Typography>
                                   <Typography variant="body2" color="text.secondary" noWrap>
@@ -432,13 +478,13 @@ const HomePage = () => {
                                 </CardContent>
                               </CardActionArea>
                             </Card>
-                          </Grid>
+                          </Box>
                         ))}
-                      </Grid>
+                      </Box>
                     </Paper>
-                  </Grid>
+                  </Box>
                 )}
-              </Grid>
+              </Box>
             </Box>
           </Grow>
         )}
