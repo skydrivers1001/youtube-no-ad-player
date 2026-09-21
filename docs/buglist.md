@@ -320,3 +320,28 @@ This document records known bugs and their resolutions for future reference.
 ### Follow-ups
 - 可補上手機瀏覽器的互動回歸測試，特別是 iOS Safari 與 Android Chrome 的播放控制與全螢幕行為。
 - 若之後再擴充自訂手勢，建議維持 opt-in 策略，避免重新干擾原生控制。
+
+---
+
+## BUG-009: 平板橫放時播放頁影片資訊區塊排版不一致
+
+- Status: Fixed
+- Affected route(s): `/watch/:videoId`
+- Affected component(s): `src/pages/PlayerPage.js`
+
+### Symptoms
+- 在平板橫向（或寬度較大的螢幕）觀看影片時，影片標題與頻道名稱會被縮窄並擠在左側。
+- 稍後觀看、加入播放清單等按鈕群會被推到標題區塊的右側，未如同手機版一樣保持上下堆疊。
+
+### Root Cause
+- `PlayerPage.js` 裡的影片資訊區塊採用了 `flex-wrap` 與 `space-between`，並讓按鈕列在 `sm` 寬度斷點以上對齊到 `flex-end`。
+- 這個響應式設定導致螢幕一旦寬過手機斷點，就會強迫標題與按鈕左右並排，破壞了一致的垂直閱讀動線。
+
+### Fix Implemented
+- 移除原本根據寬度斷點決定水平/垂直排列的 RWD 設定。
+- 將影片資訊區塊直接改為 `flex-direction: column`。
+- 讓標題區塊佔滿寬度（`width: 100%`），而下方按鈕列統一固定靠左對齊（`justifyContent: flex-start`）。
+
+### Validation
+- 平板橫放時，影片標題與作者顯示於第一列並佔滿寬度。
+- 所有的操作按鈕固定顯示在標題正下方，維持與手機版一致的上下堆疊體驗。

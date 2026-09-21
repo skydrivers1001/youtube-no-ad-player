@@ -220,8 +220,8 @@ const PlayerPage = () => {
         
         {/* 影片信息 */}
         <Box sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
-            <Box sx={{ flex: '1 1 320px', minWidth: 0 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ width: '100%', minWidth: 0 }}>
               <Typography variant="h5" gutterBottom>
                 {videoTitle}
               </Typography>
@@ -230,7 +230,7 @@ const PlayerPage = () => {
               </Typography>
             </Box>
             
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-start' }}>
               <Button
                 variant={isInWatchLater ? 'contained' : 'outlined'}
                 color={isInWatchLater ? 'warning' : 'inherit'}
