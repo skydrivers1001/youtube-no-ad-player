@@ -142,21 +142,25 @@ This document records known bugs and their resolutions for future reference.
 
 ### Root Cause
 - Render 的 404 回退腳本在保留深層連結查詢參數時，未正確區分原始路徑與多個 query 參數，導致 `title`、`channel`、`openExternalBrowser` 等資料在還原 URL 時可能混入路徑。
-- `PlayerPage` 在 URL 沒有帶入有效 `title/channel` 時，雖然會嘗試呼叫 `getVideoDetails()` 補抓資料，但原本 fallback 只依賴 YouTube Data API 與本地 mock 資料：
-  - 若 API key 不可用、配額不足，或影片不在 mock 清單中，就會退回預設的 `影片 / 頻道`。
+- `PlayerPage` 在 URL 沒有帶入有效 `title/channel` 時，原本 fallback 只依賴 YouTube Data API 與本地 mock 資料；若 API key 不可用、配額不足，或影片不在 mock 清單中，就會退回預設的 `影片 / 頻道`。
+- 後續發現本機 `recentlyPlayed` / `watchHistory` 中已存在的 `影片 / 頻道` placeholder 會被誤認為有效資料，且優先於新抓取的 metadata。
+- 播放器載入時又會立即把 placeholder 寫回最近播放與觀看歷史，使錯誤資料持續存在。
 
 ### Investigation Notes
-- 從播放器頁檢查 `videoTitle` 與 `channelName` 的來源，確認目前優先取自 `location.search`。
+- 從播放器頁檢查 `videoTitle` 與 `channelName` 的來源，確認資料可能來自 URL、本機歷史、YouTube API 與播放器本身。
 - 比對分享連結與 Render 深層路由兜底流程，發現 `404.html` 與 `index.html` 的 query/path 還原邏輯會影響 `videoId` 與標題參數解析。
 - 檢查 `youtubeService.getVideoDetails()` 後確認：當 YouTube Data API 失敗時，只會回退到本地 mock，無法覆蓋大多數真實影片。
+- 進一步確認舊快取內的 placeholder 會遮蔽後續取得的真實 metadata，並被重複寫回 Redux store。
 
 ### Fix Implemented
 - 修正 `public/404.html` 的 Render 回退腳本，將多個 query 參數安全保留下來，避免與原始路徑混淆。
 - 修正 `public/index.html` 的 URL 還原腳本，將回退後的內容重新拆分為正確的 `pathname` 與 `search`。
-- 在 `src/pages/PlayerPage.js` 中補強標題來源順序：
+- 在 `src/pages/PlayerPage.js` 中補強 metadata 來源與優先順序：
   - 先使用 URL 中有效的 `title/channel`
-  - 若缺少，則改用本機 `recentlyPlayed` / `watchHistory`
-  - 再不夠時才向服務層補抓影片資訊
+  - URL 缺少資料時，優先採用新抓取的 metadata
+  - 本機 `recentlyPlayed` / `watchHistory` 僅在內容不是 `影片 / 頻道` placeholder 時才作為 fallback
+  - YouTube player ready 後再透過 `getVideoData()` 取得標題與作者，避開 API key、配額或 CORS 限制
+- 僅在標題與頻道皆為有效值時寫入最近播放與觀看歷史，避免 placeholder 再次污染快取。
 - 在 `src/services/youtubeService.js` 中擴充 `getVideoDetails()`：
   - 先呼叫 YouTube Data API
   - 若失敗，再使用 YouTube `oEmbed` 取得公開影片標題與頻道名稱
@@ -164,7 +168,8 @@ This document records known bugs and their resolutions for future reference.
 
 ### Validation
 - 直接透過站外分享連結進入 `/watch/:videoId` 時，可正確顯示影片實際標題與頻道名稱。
-- `npm run build` 已通過，確認修正未破壞既有建置流程。
+- 已確認舊快取中的 `影片 / 頻道` 不會覆蓋新取得的真實 metadata，也不會再被寫回歷史。
+- `npm run build` 已通過，且本機預覽可正常啟動並回應 HTTP 200。
 
 ### Follow-ups
 - 若未來仍需支援更多分享來源，可考慮在後端或 Edge 層預先解析並注入標題資訊，降低前端對第三方 API 可用性的依賴。

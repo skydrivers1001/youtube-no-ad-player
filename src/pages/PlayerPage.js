@@ -43,6 +43,13 @@ const PlayerPage = () => {
   const shouldFetchVideoMeta = !hasMeaningfulValue(urlVideoTitle, '影片')
     || !hasMeaningfulValue(urlChannelName, '頻道');
 
+  const cachedVideoTitle = hasMeaningfulValue(cachedVideoInfo?.title, '影片')
+    ? cachedVideoInfo.title
+    : '';
+  const cachedChannelName = hasMeaningfulValue(cachedVideoInfo?.channel, '頻道')
+    ? cachedVideoInfo.channel
+    : '';
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -78,11 +85,11 @@ const PlayerPage = () => {
 
   const videoTitle = hasMeaningfulValue(urlVideoTitle, '影片')
     ? urlVideoTitle
-    : (cachedVideoInfo?.title || fetchedVideoMeta.title || '影片');
+    : (fetchedVideoMeta.title || cachedVideoTitle || '影片');
 
   const channelName = hasMeaningfulValue(urlChannelName, '頻道')
     ? urlChannelName
-    : (cachedVideoInfo?.channel || fetchedVideoMeta.channel || '頻道');
+    : (fetchedVideoMeta.channel || cachedChannelName || '頻道');
 
   const videoInfo = useMemo(() => ({
     id: videoId,
@@ -105,15 +112,28 @@ const PlayerPage = () => {
   const handlePlayerReady = (player) => {
     // 設置預設播放速度
     player.setPlaybackRate(settings.defaultPlaybackRate);
+
+    // YouTube 播放器本身也會提供影片標題與頻道，可避開 API 金鑰或 CORS 限制。
+    const playerVideoData = player.getVideoData?.();
+    if (playerVideoData?.title) {
+      setFetchedVideoMeta((current) => ({
+        title: playerVideoData.title || current.title,
+        channel: playerVideoData.author || current.channel,
+      }));
+    }
   };
   
   // 當 videoId 改變時記錄觀看歷史（避免重複記錄）
   useEffect(() => {
-    if (videoId && videoTitle) {
+    if (
+      videoId
+      && hasMeaningfulValue(videoTitle, '影片')
+      && hasMeaningfulValue(channelName, '頻道')
+    ) {
       dispatch(addToRecentlyPlayed(videoInfo));
       dispatch(addToWatchHistory(videoInfo));
     }
-  }, [dispatch, videoId, videoTitle, videoInfo]);
+  }, [channelName, dispatch, videoId, videoTitle, videoInfo]);
   
   // 處理添加到播放清單
   const handleAddToPlaylist = (event) => {

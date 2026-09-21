@@ -622,6 +622,16 @@ const youtubeService = {
   
   // 獲取影片詳情
   getVideoDetails: async (videoId, accessToken = null) => {
+    const formatVideoItem = (item) => ({
+      id: item.id,
+      title: item.snippet.title,
+      channel: item.snippet.channelTitle,
+      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
+      duration: item.contentDetails?.duration ? formatDuration(item.contentDetails.duration) : '未知',
+      views: item.statistics?.viewCount ? formatViews(item.statistics.viewCount) + ' 次觀看' : '未知',
+      publishedAt: item.snippet.publishedAt ? formatDate(item.snippet.publishedAt) : '未知'
+    });
+
     try {
       const response = await axios.get(
         'https://www.googleapis.com/youtube/v3/videos',
@@ -635,15 +645,7 @@ const youtubeService = {
         }
       );
 
-      const formattedItems = (response.data.items || []).map(item => ({
-        id: item.id,
-        title: item.snippet.title,
-        channel: item.snippet.channelTitle,
-        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url,
-        duration: item.contentDetails?.duration ? formatDuration(item.contentDetails.duration) : '未知',
-        views: item.statistics?.viewCount ? formatViews(item.statistics.viewCount) + ' 次觀看' : '未知',
-        publishedAt: item.snippet.publishedAt ? formatDate(item.snippet.publishedAt) : '未知'
-      }));
+      const formattedItems = (response.data.items || []).map(formatVideoItem);
 
       if (formattedItems.length > 0) {
         return {
@@ -654,6 +656,37 @@ const youtubeService = {
       }
     } catch (error) {
       console.error('YouTube API 影片詳情錯誤:', error);
+    }
+
+    try {
+      const oEmbedResponse = await axios.get(
+        'https://www.youtube.com/oembed',
+        {
+          params: {
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+            format: 'json',
+          }
+        }
+      );
+
+      const oEmbedData = oEmbedResponse.data;
+      if (oEmbedData?.title) {
+        return {
+          data: {
+            items: [{
+              id: videoId,
+              title: oEmbedData.title,
+              channel: oEmbedData.author_name || '頻道',
+              thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+              duration: '未知',
+              views: '未知',
+              publishedAt: '未知',
+            }]
+          }
+        };
+      }
+    } catch (error) {
+      console.error('YouTube oEmbed 影片詳情錯誤:', error);
     }
 
     await delay(500);
