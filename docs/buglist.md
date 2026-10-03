@@ -369,3 +369,55 @@ This document records known bugs and their resolutions for future reference.
 ### Validation
 - 清空或只有單一播放紀錄時，首頁影片卡片維持正常的 1/4 寬度（電腦版）小卡，不再被不正常放大。
 - 當繼續觀看與最近播放同時存在時，兩邊各佔一半，內部同樣維持每排兩張小卡，尺寸不變。
+
+> 後續追蹤：此修復只調整舊版 Grid 欄位比例，未處理 MUI v7 已移除 Legacy Grid 尺寸屬性的根因；完整修復請見 BUG-011。
+
+---
+
+## BUG-011: MUI v7 Legacy Grid 屬性失效造成首頁影片卡片尺寸不一致
+
+- Status: Fixed
+- Affected route(s): `/`
+- Affected component(s): `src/pages/HomePage.js`
+
+### Symptoms
+- 首頁「繼續觀看」與「最近播放」區塊中，同一組影片卡片會混合出現正常小卡與接近整個螢幕寬度的大卡。
+- 只有一筆紀錄或只有其中一個區塊時，單張卡片可能被拉滿整列。
+- 問題看似受到資料筆數、載入順序或內容影響，但縮圖尺寸與標題長度並非真正原因。
+- 先前透過調整 `md` 欄位比例的修復仍會復發。
+
+### Root Cause
+- 專案目前使用 MUI v7，但首頁仍以舊版 Grid API 的 `item`、`xs`、`sm`、`md` 屬性控制父層與卡片寬度。
+- MUI v7 內部的 Legacy Grid 相容處理會移除這些舊尺寸屬性，導致預期的欄寬 CSS 沒有產生。
+- 卡片因此失去父容器統一配置的 track 寬度，在 Flex/Grid 內容計算下依可用空間被不一致地放大。
+- BUG-010 所做的 `md={3}` / `md={6}` 調整仍依賴已失效的 Legacy Grid 屬性，所以只能改到表面設定，無法約束實際 computed width。
+
+### Investigation Notes
+- 比較正常與異常卡片的 computed style，確認異常卡片沒有預期的固定欄寬，且 `flex-basis` 為 `auto`。
+- 檢查父層、卡片、縮圖、標題及進度條後，排除圖片原始比例、文字長度、`:first-child`、`:last-child`、`:nth-child` 與個別卡片樣式造成放大。
+- 確認「繼續觀看」與「最近播放」使用相同的卡片規則，問題來源是兩者共同依賴的舊版 MUI Grid 尺寸 API。
+- 透過不同 viewport 的實際渲染寬度驗證，確認共同尺寸約束失效才是第一條來源規則。
+
+### Fix Implemented
+- 移除兩個首頁歷史區塊使用的 Legacy `<Grid container>` 與 `<Grid item>` 版面。
+- 外層區塊改為標準 CSS Grid：手機單欄、桌機雙欄，並以 `minmax(0, 1fr)` 防止內容撐破父層。
+- 卡片列表由父層 CSS Grid 統一控制固定 track：
+  - 手機：`220px`
+  - 平板：`228px`
+  - 桌機：`240px`
+- 使用 `repeat(auto-fit, <固定寬度>)` 與 `justify-content: flex-start`，確保只有一張卡片時也不會拉滿整列。
+- 卡片本身使用 `width: 100%` 填滿父層 track，並設定 `min-width: 0`，寬度不再由內容決定。
+- 縮圖容器統一為 `aspect-ratio: 16 / 9`，圖片使用 `width: 100%`、`height: 100%`、`object-fit: cover`、`display: block`。
+- 標題統一限制最多兩行並截斷，避免長標題改變卡片寬度。
+- 樣式僅定義於 `HomePage.js` 的「繼續觀看」與「最近播放」區塊，不影響播放器、搜尋結果及其他頁面。
+
+### Validation
+- 約 390px 手機寬度：卡片維持 220px、縮圖比例 16:9，單張資料不會撐滿整列。
+- 約 768px／834px 平板直向：卡片維持 228px，同一區塊內寬度一致且無非預期水平溢出。
+- 約 1280px 桌機寬度：卡片維持 240px，兩個區塊並排時仍使用相同尺寸規則。
+- 長標題、短標題及不同原始尺寸縮圖均不會改變卡片寬度。
+- `npm run build` 編譯成功。
+
+### Follow-ups
+- 新增或升級 MUI 元件時，避免繼續使用已棄用的 Legacy Grid `item/xs/sm/md` API。
+- 可加入首頁三種 viewport 的視覺回歸測試，覆蓋單張、多張、長標題與不同縮圖尺寸情境。
