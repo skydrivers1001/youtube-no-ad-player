@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -18,8 +18,9 @@ import {
   Grow,
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaYoutube, FaPlay, FaList, FaSearch } from 'react-icons/fa';
+import { FaYoutube, FaPlay, FaList, FaSearch, FaDownload } from 'react-icons/fa';
 import TrafficDisplay from '../components/statistics/TrafficDisplay';
+import { extractYouTubeVideoId } from '../utils/parseYouTubeUrl';
 
 const HomePage = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -29,6 +30,36 @@ const HomePage = () => {
   const recentlyPlayed = useSelector((state) => state.playlists.recentlyPlayed);
   const watchHistory = useSelector((state) => state.playlists.watchHistory);
   const progressMap = useSelector((state) => state.progress.videoProgress);
+
+  // Android PWA install prompt
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    const onBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredInstallPrompt(e);
+    };
+    const onAppInstalled = () => {
+      setInstalled(true);
+      setDeferredInstallPrompt(null);
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
+
+  const promptInstall = () => {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then(({ outcome }) => {
+        if (outcome === 'accepted') setDeferredInstallPrompt(null);
+      });
+    }
+  };
 
   const videoMetaMap = [...recentlyPlayed, ...watchHistory].reduce((accumulator, video) => {
     if (!accumulator[video.id]) {
@@ -50,13 +81,6 @@ const HomePage = () => {
     .slice(0, 4);
 
   const recentVideos = recentlyPlayed.slice(0, 6);
-  
-  // 從 YouTube URL 提取影片 ID
-  const extractVideoId = (url) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
   
   // 處理 YouTube URL 提交
   const handleSubmit = (e) => {
@@ -88,7 +112,7 @@ const HomePage = () => {
       return;
     }
     
-    const videoId = extractVideoId(youtubeUrl);
+    const videoId = extractYouTubeVideoId(youtubeUrl);
     
     if (videoId) {
       setError('');
@@ -227,6 +251,46 @@ const HomePage = () => {
             >
               沒有干擾、乾淨體驗、流暢操作
             </Typography>
+
+            {/* Android PWA Install Banner */}
+            {!installed && (deferredInstallPrompt || window.matchMedia('(display-mode: standalone)').matches === false) && (
+              <Paper
+                elevation={8}
+                sx={{
+                  mt: 3,
+                  px: 3,
+                  py: 2,
+                  borderRadius: 3,
+                  background: 'rgba(255,255,255,0.12)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 2,
+                }}
+              >
+                <Box sx={{ color: '#fff', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <FaDownload size={18} />
+                  <Typography variant="body2" color="#fff" sx={{ fontWeight: 500 }}>
+                    安裝 YouTube No AD，可直接從 YouTube「分享」開啟影片
+                  </Typography>
+                </Box>
+                {deferredInstallPrompt ? (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={promptInstall}
+                    sx={{ borderRadius: 2, px: 3, background: 'rgba(255,255,255,0.9)', '&:hover': { background: '#fff' } }}
+                  >
+                    安裝
+                  </Button>
+                ) : (
+                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)', display: 'block' }}>
+                    Chrome 右上角 ⋮ → 安裝應用程式
+                  </Typography>
+                )}
+              </Paper>
+            )}
           </Box>
         </Fade>
 

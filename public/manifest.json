@@ -1,6 +1,8 @@
 {
+  "id": "/",
   "short_name": "YouTube No AD",
   "name": "YouTube No AD Player",
+  "description": "用網站開啟 YouTube 影片，並接收 Android 分享內容。",
   "icons": [
     {
       "src": "favicon.ico",
@@ -10,21 +12,34 @@
     {
       "src": "apple-touch-icon-120x120.png",
       "type": "image/png",
-      "sizes": "120x120"
+      "sizes": "120x120",
+      "purpose": "any"
     },
     {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": ".",
+  "scope": "./",
   "display": "standalone",
   "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "background_color": "#ffffff",
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "url": "url",
+      "title": "title",
+      "text": "text"
+    }
+  }
 }

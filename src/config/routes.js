@@ -7,6 +7,7 @@
 export const APP_ROUTES = {
   HOME: '/',
   SEARCH: '/search',
+  SHARE: '/share',
   WATCH: '/watch/:videoId',
   PLAYLISTS: '/playlists',
   SETTINGS: '/settings',
@@ -20,6 +21,7 @@ export const ROUTE_PATHS = Object.values(APP_ROUTES);
 export const EXACT_ROUTES = [
   APP_ROUTES.HOME,
   APP_ROUTES.SEARCH,
+  APP_ROUTES.SHARE,
   APP_ROUTES.PLAYLISTS,
   APP_ROUTES.SETTINGS,
   APP_ROUTES.OAUTH_CALLBACK
@@ -63,6 +65,12 @@ export const ROUTE_META = {
   [APP_ROUTES.SETTINGS]: {
     title: '設定 - YouTube No AD Player',
     description: '應用程式設定',
+    requiresAuth: false,
+    preload: false
+  },
+  [APP_ROUTES.SHARE]: {
+    title: '分享入口 - YouTube No AD Player',
+    description: '接收 Android PWA 分享內容並導向播放頁',
     requiresAuth: false,
     preload: false
   },

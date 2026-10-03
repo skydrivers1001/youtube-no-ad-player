@@ -120,46 +120,16 @@
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
     
-    <!-- Service Worker 註冊 -->
+    <!-- Service Worker registration for Android PWA + /share entry -->
     <script>
-      // 暫時禁用 Service Worker 註冊來測試頁面閃爍問題
-      /*
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js')
-            .then(function(registration) {
-              console.log('SW registered: ', registration);
-              
-              // 檢查是否有新的 Service Worker 等待啟用
-              if (registration.waiting) {
-                registration.waiting.postMessage({type: 'SKIP_WAITING'});
-              }
-              
-              // 監聽 Service Worker 更新
-              registration.addEventListener('updatefound', function() {
-                const newWorker = registration.installing;
-                if (newWorker) {
-                  newWorker.addEventListener('statechange', function() {
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      console.log('New SW available, will refresh on next navigation');
-                    }
-                  });
-                }
-              });
-            })
-            .catch(function(registrationError) {
-              console.log('SW registration failed: ', registrationError);
+            .catch(function(error) {
+              console.log('Service Worker registration failed:', error);
             });
         });
-        
-        // 監聽 Service Worker 控制權變更
-        navigator.serviceWorker.addEventListener('controllerchange', function() {
-          console.log('SW controller changed');
-          // 移除自動重新載入，避免頁面不斷刷新
-          // window.location.reload();
-        });
       }
-      */
       
       // 白屏保護：生產環境在深層連結重載時顯示回復選項
       (function() {

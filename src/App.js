@@ -9,6 +9,7 @@ import SearchPage from './pages/SearchPage';
 import PlayerPage from './pages/PlayerPage';
 import PlaylistsPage from './pages/PlaylistsPage';
 import SettingsPage from './pages/SettingsPage';
+import SharePage from './pages/SharePage';
 
 // 認證組件
 import GoogleAuthCallback from './components/auth/GoogleAuthCallback';
@@ -76,6 +77,7 @@ function App() {
                 <Routes>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/search" element={<SearchPage />} />
+                  <Route path="/share" element={<SharePage />} />
                   <Route path="/watch/:videoId" element={<PlayerPage />} />
                   <Route path="/playlists" element={<PlaylistsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
