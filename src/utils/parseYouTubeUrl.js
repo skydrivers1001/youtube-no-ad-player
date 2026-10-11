@@ -1,7 +1,7 @@
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
-// 播放清單 ID 通常以 PL / UU / UL / OL / RD 開頭，但為求完整仍接受任意字元
-const PLAYLIST_ID_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+// 播放清單 ID 通常以 PL / UU / UL / OL / RD 開頭，長度多在 12~64 字元
+const PLAYLIST_ID_PATTERN = /^[A-Za-z0-9_-]{12,64}$/;
 
 const YOUTUBE_URL_PATTERNS = [
   /youtu\.be\/([A-Za-z0-9_-]{11})(?:[/?#&]|$)/,

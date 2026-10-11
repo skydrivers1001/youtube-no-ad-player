@@ -358,6 +358,17 @@ const VideoPlayer = ({
       }
     }
 
+    if (isPlaying) {
+      const activeVideoData = ytPlayer.getVideoData?.();
+      if (activeVideoData?.video_id && activeVideoData.video_id !== videoId && onVideoChange) {
+        onVideoChange({
+          id: activeVideoData.video_id,
+          title: activeVideoData.title,
+          channel: activeVideoData.author,
+        });
+      }
+    }
+
     if (!isPlaying) {
       flushPendingUsage();
       lastPlaybackSampleRef.current = ytPlayer.getCurrentTime?.() || 0;
@@ -407,8 +418,14 @@ const VideoPlayer = ({
         }
         return;
       }
+
+      // 若清單列表為空或只有 1 部，委由 YouTube 播放器內建清單機制切換下一支
+      if (playlistId && typeof ytPlayer.nextVideo === 'function') {
+        ytPlayer.nextVideo();
+        return;
+      }
     }
-  }, [dispatch, flushPendingUsage, updatePlaybackState, videoId, playlistVideos, onVideoChange, title, channelName, playlistLabel, showNotice]);
+  }, [dispatch, flushPendingUsage, updatePlaybackState, videoId, playlistId, playlistVideos, onVideoChange, title, channelName, playlistLabel, showNotice]);
 
   useEffect(() => {
     if (!player) return;

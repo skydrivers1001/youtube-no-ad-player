@@ -64,12 +64,12 @@ const PlayerPage = () => {
 
         // 從 /watch/playlist/:playlistId 進入且尚未指定影片時，導向第一支
         if (playlistRouteId && !videoId) {
-          if (videos.length > 0) {
-            const startIndex = Math.max(0, Number(searchParams.get('index') || 0));
-            const firstVideo = videos[Math.min(startIndex, videos.length - 1)];
-            if (firstVideo) {
-              navigate(`/watch/${firstVideo.id}?list=${activePlaylistId}`, { replace: true });
-            }
+          const targetVideo = (videos && videos.length > 0)
+            ? videos[Math.min(Math.max(0, Number(searchParams.get('index') || 0)), videos.length - 1)]
+            : (info?.firstVideoId ? { id: info.firstVideoId } : null);
+
+          if (targetVideo?.id) {
+            navigate(`/watch/${targetVideo.id}?list=${activePlaylistId}`, { replace: true });
           } else {
             setPlaylistLoadFailed(true);
           }
@@ -191,6 +191,27 @@ const PlayerPage = () => {
         title: playerVideoData.title || current.title,
         channel: playerVideoData.author || current.channel,
       }));
+    }
+
+    // 若為播放清單，透過播放器內建清單 API 嘗試動態補充影片列表
+    if (activePlaylistId) {
+      const playlistIds = player.getPlaylist?.();
+      if (Array.isArray(playlistIds) && playlistIds.length > 0) {
+        setPlaylistVideos((prev) => {
+          if (prev.length <= 1 && playlistIds.length > 1) {
+            return playlistIds.map((id, index) => ({
+              id,
+              title: (index === 0 && (playerVideoData?.title || playlistInfo?.title)) 
+                ? (playerVideoData?.title || playlistInfo?.title) 
+                : `影片 #${index + 1}`,
+              channel: playerVideoData?.author || playlistInfo?.channel || 'YouTube',
+              thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+              position: index,
+            }));
+          }
+          return prev;
+        });
+      }
     }
   };
   

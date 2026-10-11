@@ -726,11 +726,38 @@ const youtubeService = {
           thumbnail: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
           videoCount: item.contentDetails.itemCount,
           channel: item.snippet.channelTitle,
+          firstVideoId: null,
         };
       }
     } catch (error) {
-      console.error('YouTube API 播放清單資訊錯誤:', error);
+      console.warn('YouTube API 播放清單資訊錯誤，嘗試 oEmbed fallback:', error?.message || error);
     }
+
+    // Fallback: 免 API Key 的官方 oEmbed 端點
+    try {
+      const oEmbedResponse = await axios.get('https://www.youtube.com/oembed', {
+        params: {
+          url: `https://www.youtube.com/playlist?list=${playlistId}`,
+          format: 'json',
+        }
+      });
+      const oEmbedData = oEmbedResponse.data;
+      if (oEmbedData?.title) {
+        const firstVideoMatch = oEmbedData.thumbnail_url?.match(/\/vi\/([A-Za-z0-9_-]{11})\//);
+        const firstVideoId = firstVideoMatch ? firstVideoMatch[1] : null;
+        return {
+          id: playlistId,
+          title: oEmbedData.title,
+          thumbnail: oEmbedData.thumbnail_url || (firstVideoId ? `https://i.ytimg.com/vi/${firstVideoId}/hqdefault.jpg` : ''),
+          videoCount: 0,
+          channel: oEmbedData.author_name || 'YouTube 播放清單',
+          firstVideoId,
+        };
+      }
+    } catch (oembedError) {
+      console.warn('YouTube oEmbed 播放清單查詢失敗:', oembedError?.message || oembedError);
+    }
+
     return null;
   },
 
@@ -760,11 +787,37 @@ const youtubeService = {
           position: item.snippet.position || 0,
         }));
 
-      return items.sort((a, b) => a.position - b.position);
+      if (items.length > 0) {
+        return items.sort((a, b) => a.position - b.position);
+      }
     } catch (error) {
-      console.error('YouTube API 播放清單影片錯誤:', error);
-      return [];
+      console.warn('YouTube API 播放清單影片錯誤，嘗試 oEmbed 解析第一支影片:', error?.message || error);
     }
+
+    // Fallback: 透過 oEmbed 至少抓出第 1 支影片，避免卡死或顯示載入失敗
+    try {
+      const oEmbedResponse = await axios.get('https://www.youtube.com/oembed', {
+        params: {
+          url: `https://www.youtube.com/playlist?list=${playlistId}`,
+          format: 'json',
+        }
+      });
+      const oEmbedData = oEmbedResponse.data;
+      const firstVideoMatch = oEmbedData?.thumbnail_url?.match(/\/vi\/([A-Za-z0-9_-]{11})\//);
+      if (firstVideoMatch?.[1]) {
+        return [{
+          id: firstVideoMatch[1],
+          title: oEmbedData.title || '播放清單第 1 首',
+          channel: oEmbedData.author_name || 'YouTube 頻道',
+          thumbnail: oEmbedData.thumbnail_url,
+          position: 0,
+        }];
+      }
+    } catch (oembedError) {
+      console.warn('oEmbed 備份影片解析失敗:', oembedError?.message || oembedError);
+    }
+
+    return [];
   },
 
   // 獲取相關影片
