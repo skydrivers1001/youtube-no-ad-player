@@ -565,3 +565,27 @@ This document records known bugs and their resolutions for future reference.
 - 播放清單播完當前歌曲後，自動載入下一首並立即主動播放，不再停頓在第 0 秒。
 - 手動在清單點擊其他曲目時，立即切換並直接播放。
 - 專案執行 `npm run build` 打包編譯成功。
+
+---
+
+## BUG-018: Android PWA / 主畫面捷徑更新相容性與舊快取常駐
+
+- Date: 2026-10-11
+- Status: Clarified & Documented
+- Affected route(s): All routes (PWA 模式)
+- Affected component(s): `public/manifest.json`, `public/sw.js`, `public/index.html`
+
+### Symptoms
+- 使用者疑慮伺服器部署新功能（例如切換下一首主動播放、介面優化等）後，原本已安裝在 Android 手機上的 PWA 或桌面捷徑是否需要移除重新設定，才能享受新功能。
+
+### Root Cause & Architecture Analysis
+1. **捷徑與 WebAPK 架構**：Android 建立的 PWA 主畫面捷徑本質為指向固定網址（`start_url: "/"`）的輕量外殼，並不把 JavaScript/CSS 業務邏輯寫死在捷徑中。伺服器更新代碼後，入口網址未變，捷徑依然有效。
+2. **多工程序快取常駐**：Android 系統傾向在後台常駐已開啟的 PWA 程序（WebAPK/Chrome 核心），導致記憶體中可能繼續執行舊的 JS Bundle，直到該 Process 被銷毀重啟或收到 Service Worker 的更新通知。
+
+### Resolution & Guidance
+- **捷徑處理**：完全不需要重新設定或刪除重新加入主畫面，既有捷徑可無縫沿用。
+- **更新生效操作**：若開啟後尚未即時反映最新功能，僅需將該 PWA 應用從 Android 後台多工列表完整滑掉關閉後重開，或於頁面向下拉動重新載入一次，即可載入最新部署程式碼。
+
+### Follow-ups
+- 建議於前端全域加入版本輪詢廣播機制（例如當 Service Worker 進入 `waiting` 或取得新版 hash 時，跳出「有新版本可用，點擊立即更新」提示），讓 PWA 用戶無需手動重開程序也能一鍵平滑更新。
+
