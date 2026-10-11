@@ -17,6 +17,9 @@
       })(window.location);
     </script>
     <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
@@ -125,6 +128,10 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js')
+            .then(function(reg) {
+              // 每次載入時檢查是否有新版 Service Worker
+              reg.update();
+            })
             .catch(function(error) {
               console.log('Service Worker registration failed:', error);
             });
