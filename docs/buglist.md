@@ -504,23 +504,22 @@ This document records known bugs and their resolutions for future reference.
 ## BUG-015: 單部影片網址帶播放清單參數時未能自動連續播放下一部
 
 - Date: 2026-10-11
-- Status: Open (未盡事項)
+- Status: Fixed
 - Affected route(s): `/watch/:videoId?list=:playlistId`
-- Affected component(s): `src/pages/PlayerPage.js`, `src/services/youtubeService.js`
+- Affected component(s): `src/pages/PlayerPage.js`, `src/services/youtubeService.js`, `src/components/player/VideoPlayer.js`
 
 ### Symptoms
 - 使用者從 YouTube 複製特定影片網址（格式如 `https://www.youtube.com/watch?v=xxx&list=PLxxx`）貼入播放時，當前影片播放完畢後，不會自動繼續播放該清單中的下一部影片。
 
 ### Root Cause
-- 目前系統在處理單一影片網址時，若僅解析出 `videoId`，播放器僅能載入單部影片；雖然 URL 中附帶有 `list` 參數，但前端尚未在背景自動觸發 `getPlaylistVideos` 將整個播放清單下載並組裝成播放佇列（Queue）。
-- 當 YouTube Data API 配額受限或失效時，無法僅靠 oEmbed 一次性取得完整清單內容，需要額外的解析或降級機制。
+- 系統過去未將 URL 中的 `list` 參數與播放器隊列連動，未自動抓取清單影片資訊並組合成連續播放佇列。
 
-### Proposed Fix / Action Items
-- 在 `PlayerPage` 載入時檢測 URL 是否含有 `list` 參數：
-  1. 若有 `list` 參數且當前未載入 `playlistVideos`，於背景自動呼叫 `youtubeService.getPlaylistVideos(listId)`。
-  2. 取得清單後，以當前 `videoId` 匹配清單索引（`currentIndex`），構建播放隊列。
-  3. 當影片觸發 `onEnded` 時，自動無縫切換到下一部影片。
-- 若 YouTube API 失敗（配額限制），應在介面上提示使用者「清單自動連播受限，目前僅能播放本部影片」。
+### Fix Implemented
+- 在 `PlayerPage` 載入時偵測 `list` 參數（`activePlaylistId`），自動載入清單並傳遞 `playlistVideos` 與 `initialVideoIndex`。
+- `VideoPlayer` 在初始化播放器時加入 `listType: 'playlist', list: playlistId`，並實作雙軌換曲同步。
+
+### Validation
+- 網址附帶 `list` 參數時，能載入清單並於播畢後自動順播下一首。
 
 ---
 
@@ -588,4 +587,34 @@ This document records known bugs and their resolutions for future reference.
 
 ### Follow-ups
 - 建議於前端全域加入版本輪詢廣播機制（例如當 Service Worker 進入 `waiting` 或取得新版 hash 時，跳出「有新版本可用，點擊立即更新」提示），讓 PWA 用戶無需手動重開程序也能一鍵平滑更新。
+
+---
+
+## BUG-019: 播放清單第二首後無法切至第三首及上一首/下一首按鈕失效
+
+- Date: 2026-10-11
+- Status: Fixed
+- Affected route(s): `/watch/:videoId` (帶清單參數或播放清單模式)
+- Affected component(s): `src/components/player/VideoPlayer.js`, `src/pages/PlayerPage.js`
+
+### Symptoms
+1. 播放清單第一首結束會主動切第二首播放，但是第二首結束後不會切到第三首，只會在第二首結束處停下。
+2. 影片控制列上的「上一首」與「下一首」按鈕，在第一首時可以切至第二首，但到了第二首後就無法再切下一首，也無法回退至上一首。
+
+### Root Cause
+1. **依賴靜態指標與索引脫節**：播放器換曲時依賴了單純遞增的狀態指標（如 `currentVideoIndexRef.current + 1`），但當切換到第二首時，若網址更新、React 重新渲染與播放器內部事件發生時序差，索引未能即時對準真實歌曲的 `video_id`，造成後續結束事件時計算出的目標歌曲遺失或越界。
+2. **原生播放清單佇列被強行覆蓋**：以 `listType: 'playlist'` 載入的原生清單具備 iframe 內部的 `getPlaylist()` 隊列，舊邏輯在切換影片或路由變更觸發的 `useEffect([videoId])` 中，強制呼叫了 `loadVideoById()`，直接清空摧毀了 iframe 原生的清單佇列，使得 YouTube 原生上一首/下一首能力失效。
+3. **控制器缺少直覺的實體切換鍵**：自定義控制列原先僅有「快退 10 秒 / 快進 10 秒」，行動端與桌面端缺少直觀清晰的實體「上一首」與「下一首」按鈕。
+
+### Fix Implemented
+1. **動態反查真實播放歌曲索引**：實作 `playNextVideo` 與 `playPreviousVideo`，每次換曲前皆由 `ytPlayer.getVideoData()?.video_id || videoId` 比對當前陣列中的真實 index，再配合模數運算 `(currentIndex ± 1 + len) % len` 達成無縫循環切換，徹底杜絕指標卡死在第二首的問題。
+2. **優先維護原生清單隊列**：若播放器已載入原生清單（`ytPlayer.getPlaylist()`），優先調用 `ytPlayer.playVideoAt(targetIdx)` 切歌，保護隊列完整性，不再以 `loadVideoById` 摧毀清單。
+3. **路由安全防抖守衛**：在 `useEffect([videoId])` 中加入檢查，若播放器已經在播放目標 `videoId` 或原生清單已包含該曲目，跳過破壞性的 `loadVideoById`。
+4. **控制面板與 MediaSession 統一**：在桌面與手機自定義控制列全面加入實體【上一首 (`FaStepBackward`)】與【下一首 (`FaStepForward`)】按鈕，並與系統 MediaSession（`nexttrack`/`previoustrack`）及影片播畢（`isEnded`）完全對齊。
+
+### Validation
+- 播放清單從第 1 首播畢自動切換至第 2 首，第 2 首播畢順暢自動切換至第 3 首，並持續循序播放。
+- 點擊控制列的「下一首」可連續由第 1 首切到第 2 首、第 3 首、第 4 首...並支援循環；點擊「上一首」可正常回退。
+- 專案執行 `npm run build` 打包編譯通過（無錯誤）。
+
 

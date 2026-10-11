@@ -10,6 +10,8 @@ import {
   FaVolumeMute,
   FaForward,
   FaBackward,
+  FaStepForward,
+  FaStepBackward,
   FaExternalLinkAlt,
   FaClosedCaptioning,
   FaRedo
@@ -40,6 +42,7 @@ const VideoPlayer = forwardRef(({
   initialVideoIndex = 0,
   playlistLabel = '',
   onVideoChange = null,
+  onPlaylistDetected = null,
   loopEnabled: externalLoopEnabled,
   onLoopChange = null,
 }, ref) => {
@@ -314,6 +317,186 @@ const VideoPlayer = forwardRef(({
     lastPlaybackSampleRef.current = newTime;
   }, [syncCurrentTime]);
 
+  const syncPlaylistFromPlayer = useCallback((ytPlayer) => {
+    if (!ytPlayer || !onPlaylistDetected) return;
+    try {
+      const playlistIds = ytPlayer.getPlaylist?.();
+      if (Array.isArray(playlistIds) && playlistIds.length > 1) {
+        onPlaylistDetected(playlistIds);
+      }
+    } catch (e) {
+      console.debug('syncPlaylistFromPlayer error', e);
+    }
+  }, [onPlaylistDetected]);
+
+  const playNextVideo = useCallback(() => {
+    const ytPlayer = playerRef.current;
+    if (!ytPlayer) return;
+
+    // 1. 若播放器內部有原生 YouTube 清單且有至少 2 支影片
+    const playlistIds = ytPlayer.getPlaylist?.();
+    const playlistIdx = ytPlayer.getPlaylistIndex?.();
+    if (Array.isArray(playlistIds) && playlistIds.length > 1 && typeof playlistIdx === 'number' && playlistIdx >= 0) {
+      const nextIdx = (playlistIdx + 1) % playlistIds.length;
+      const nextId = playlistIds[nextIdx];
+      lastLoadedVideoIdRef.current = nextId;
+      currentVideoIndexRef.current = nextIdx;
+      dispatch(clearVideoProgress({ videoId }));
+      if (playlistLabel) {
+        showNotice(`播放清單 (${nextIdx + 1}/${playlistIds.length})`, 'info');
+      }
+      try {
+        ytPlayer.playVideoAt(nextIdx);
+      } catch (e) {
+        console.debug('ytPlayer.playVideoAt error', e);
+        try {
+          ytPlayer.nextVideo();
+        } catch (e2) {
+          console.debug('ytPlayer.nextVideo error', e2);
+        }
+      }
+      const matchedVideo = playlistVideos.find((v) => v.id === nextId) || { id: nextId };
+      if (onVideoChange) {
+        onVideoChange(matchedVideo, nextIdx);
+      }
+      return;
+    }
+
+    // 2. 透過 playlistVideos 切換（由當前影片 ID 動態定位）
+    if (playlistVideos.length > 0) {
+      const currentActualId = ytPlayer.getVideoData?.()?.video_id || videoId;
+      let currentIndex = playlistVideos.findIndex((v) => v.id === currentActualId);
+      if (currentIndex === -1) {
+        currentIndex = currentVideoIndexRef.current;
+      }
+
+      const nextIndex = (currentIndex + 1) % playlistVideos.length;
+      const nextVideo = playlistVideos[nextIndex];
+      if (nextVideo?.id) {
+        currentVideoIndexRef.current = nextIndex;
+        lastLoadedVideoIdRef.current = nextVideo.id;
+        dispatch(clearVideoProgress({ videoId }));
+        if (playlistLabel) {
+          showNotice(`播放清單 (${nextIndex + 1}/${playlistVideos.length})`, 'info');
+        }
+
+        const currentPlaylist = ytPlayer.getPlaylist?.();
+        if (Array.isArray(currentPlaylist) && currentPlaylist.includes(nextVideo.id)) {
+          try {
+            ytPlayer.playVideoAt(currentPlaylist.indexOf(nextVideo.id));
+          } catch (e) {
+            console.debug('playVideoAt error', e);
+          }
+        } else {
+          try {
+            ytPlayer.loadVideoById(nextVideo.id);
+            ytPlayer.playVideo();
+          } catch (e) {
+            console.debug('loadVideoById failed', e);
+          }
+        }
+
+        if (onVideoChange) {
+          onVideoChange(nextVideo, nextIndex);
+        }
+        return;
+      }
+    }
+
+    // 3. Fallback: 調用原生 nextVideo
+    if (playlistId && typeof ytPlayer.nextVideo === 'function') {
+      try {
+        ytPlayer.nextVideo();
+      } catch (e) {
+        console.debug('ytPlayer.nextVideo fallback error', e);
+      }
+    }
+  }, [playlistVideos, videoId, playlistLabel, showNotice, dispatch, onVideoChange, playlistId]);
+
+  const playPreviousVideo = useCallback(() => {
+    const ytPlayer = playerRef.current;
+    if (!ytPlayer) return;
+
+    // 1. 若播放器內部有原生 YouTube 清單且有上一首
+    const playlistIds = ytPlayer.getPlaylist?.();
+    const playlistIdx = ytPlayer.getPlaylistIndex?.();
+    if (Array.isArray(playlistIds) && playlistIds.length > 1 && typeof playlistIdx === 'number' && playlistIdx >= 0) {
+      const prevIdx = (playlistIdx - 1 + playlistIds.length) % playlistIds.length;
+      const prevId = playlistIds[prevIdx];
+      lastLoadedVideoIdRef.current = prevId;
+      currentVideoIndexRef.current = prevIdx;
+      dispatch(clearVideoProgress({ videoId }));
+      if (playlistLabel) {
+        showNotice(`播放清單 (${prevIdx + 1}/${playlistIds.length})`, 'info');
+      }
+      try {
+        ytPlayer.playVideoAt(prevIdx);
+      } catch (e) {
+        console.debug('ytPlayer.playVideoAt error', e);
+        try {
+          ytPlayer.previousVideo();
+        } catch (e2) {
+          console.debug('ytPlayer.previousVideo error', e2);
+        }
+      }
+      const matchedVideo = playlistVideos.find((v) => v.id === prevId) || { id: prevId };
+      if (onVideoChange) {
+        onVideoChange(matchedVideo, prevIdx);
+      }
+      return;
+    }
+
+    // 2. 透過 playlistVideos 切換
+    if (playlistVideos.length > 0) {
+      const currentActualId = ytPlayer.getVideoData?.()?.video_id || videoId;
+      let currentIndex = playlistVideos.findIndex((v) => v.id === currentActualId);
+      if (currentIndex === -1) {
+        currentIndex = currentVideoIndexRef.current;
+      }
+
+      const prevIndex = (currentIndex - 1 + playlistVideos.length) % playlistVideos.length;
+      const prevVideo = playlistVideos[prevIndex];
+      if (prevVideo?.id) {
+        currentVideoIndexRef.current = prevIndex;
+        lastLoadedVideoIdRef.current = prevVideo.id;
+        dispatch(clearVideoProgress({ videoId }));
+        if (playlistLabel) {
+          showNotice(`播放清單 (${prevIndex + 1}/${playlistVideos.length})`, 'info');
+        }
+
+        const currentPlaylist = ytPlayer.getPlaylist?.();
+        if (Array.isArray(currentPlaylist) && currentPlaylist.includes(prevVideo.id)) {
+          try {
+            ytPlayer.playVideoAt(currentPlaylist.indexOf(prevVideo.id));
+          } catch (e) {
+            console.debug('playVideoAt error', e);
+          }
+        } else {
+          try {
+            ytPlayer.loadVideoById(prevVideo.id);
+            ytPlayer.playVideo();
+          } catch (e) {
+            console.debug('loadVideoById failed', e);
+          }
+        }
+
+        if (onVideoChange) {
+          onVideoChange(prevVideo, prevIndex);
+        }
+        return;
+      }
+    }
+
+    // 3. Fallback: 調用原生 previousVideo
+    if (playlistId && typeof ytPlayer.previousVideo === 'function') {
+      try {
+        ytPlayer.previousVideo();
+      } catch (e) {
+        console.debug('ytPlayer.previousVideo fallback error', e);
+      }
+    }
+  }, [playlistVideos, videoId, playlistLabel, showNotice, dispatch, onVideoChange, playlistId]);
+
   const handleReady = useCallback((event) => {
     const ytPlayer = event.target;
     setPlayer(ytPlayer);
@@ -354,7 +537,8 @@ const VideoPlayer = forwardRef(({
     if (onReady) {
       onReady(ytPlayer);
     }
-  }, [autoplay, onReady, savedProgress]);
+    syncPlaylistFromPlayer(ytPlayer);
+  }, [autoplay, onReady, savedProgress, syncPlaylistFromPlayer]);
 
   const handleStateChange = useCallback((event) => {
     const ytPlayer = event.target;
@@ -374,21 +558,17 @@ const VideoPlayer = forwardRef(({
     if (isPlaying && onVideoChange) {
       const videoData = ytPlayer.getVideoData?.();
       if (videoData?.video_id && videoId && videoData.video_id !== videoId) {
+        lastLoadedVideoIdRef.current = videoData.video_id;
+        if (playlistVideos.length > 0) {
+          const idx = playlistVideos.findIndex((v) => v.id === videoData.video_id);
+          if (idx !== -1) {
+            currentVideoIndexRef.current = idx;
+          }
+        }
         onVideoChange({
           id: videoData.video_id,
           title: videoData.title || title,
           channel: videoData.author || channelName,
-        });
-      }
-    }
-
-    if (isPlaying) {
-      const activeVideoData = ytPlayer.getVideoData?.();
-      if (activeVideoData?.video_id && activeVideoData.video_id !== videoId && onVideoChange) {
-        onVideoChange({
-          id: activeVideoData.video_id,
-          title: activeVideoData.title,
-          channel: activeVideoData.author,
         });
       }
     }
@@ -409,55 +589,10 @@ const VideoPlayer = forwardRef(({
         ytPlayer.playVideo();
         return;
       }
-      // 播放清單自動進下一支
-      const nextIndex = currentVideoIndexRef.current + 1;
-      if (playlistVideos.length > 0 && nextIndex < playlistVideos.length) {
-        const nextVideo = playlistVideos[nextIndex];
-        if (nextVideo?.id) {
-          currentVideoIndexRef.current = nextIndex;
-          dispatch(clearVideoProgress({ videoId }));
-          if (playlistLabel) {
-            showNotice(`播放清單 (${nextIndex + 1}/${playlistVideos.length})`, 'info');
-          }
-          lastLoadedVideoIdRef.current = nextVideo.id;
-          try {
-            ytPlayer.loadVideoById(nextVideo.id);
-            ytPlayer.playVideo();
-          } catch (e) {
-            console.debug('loadVideoById failed', e);
-          }
-          if (onVideoChange) {
-            onVideoChange(nextVideo, nextIndex);
-          }
-          return;
-        }
-      }
-      if (playlistVideos.length > 0 && nextIndex >= playlistVideos.length && playlistVideos.length > 1) {
-        // 循環清單
-        currentVideoIndexRef.current = 0;
-        if (playlistLabel) {
-          showNotice(`播放清單循環 (1/${playlistVideos.length})`, 'info');
-        }
-        lastLoadedVideoIdRef.current = playlistVideos[0].id;
-        try {
-          ytPlayer.loadVideoById(playlistVideos[0].id);
-          ytPlayer.playVideo();
-        } catch (e) {
-          console.debug('loadVideoById failed', e);
-        }
-        if (onVideoChange) {
-          onVideoChange(playlistVideos[0], 0);
-        }
-        return;
-      }
-
-      // 若清單列表為空或只有 1 部，委由 YouTube 播放器內建清單機制切換下一支
-      if (playlistId && typeof ytPlayer.nextVideo === 'function') {
-        ytPlayer.nextVideo();
-        return;
-      }
+      // 呼叫統一的下一首處理（原生清單 / 應用層清單）
+      playNextVideo();
     }
-  }, [dispatch, flushPendingUsage, updatePlaybackState, videoId, playlistId, playlistVideos, onVideoChange, title, channelName, playlistLabel, showNotice]);
+  }, [dispatch, flushPendingUsage, updatePlaybackState, videoId, playlistVideos, onVideoChange, title, channelName, playNextVideo]);
 
   useEffect(() => {
     if (!player) return;
@@ -606,38 +741,10 @@ const VideoPlayer = forwardRef(({
     });
 
     setHandler('nexttrack', () => {
-      const nextIndex = currentVideoIndexRef.current + 1;
-      if (playlistVideos.length > 0 && nextIndex < playlistVideos.length) {
-        const nextVideo = playlistVideos[nextIndex];
-        if (nextVideo?.id) {
-          currentVideoIndexRef.current = nextIndex;
-          lastLoadedVideoIdRef.current = nextVideo.id;
-          try {
-            playerRef.current?.loadVideoById?.(nextVideo.id);
-            playerRef.current?.playVideo?.();
-          } catch (e) {
-            console.debug('nexttrack error', e);
-          }
-          onVideoChange?.(nextVideo, nextIndex);
-        }
-      }
+      playNextVideo();
     });
     setHandler('previoustrack', () => {
-      const prevIndex = currentVideoIndexRef.current - 1;
-      if (playlistVideos.length > 0 && prevIndex >= 0) {
-        const prevVideo = playlistVideos[prevIndex];
-        if (prevVideo?.id) {
-          currentVideoIndexRef.current = prevIndex;
-          lastLoadedVideoIdRef.current = prevVideo.id;
-          try {
-            playerRef.current?.loadVideoById?.(prevVideo.id);
-            playerRef.current?.playVideo?.();
-          } catch (e) {
-            console.debug('previoustrack error', e);
-          }
-          onVideoChange?.(prevVideo, prevIndex);
-        }
-      }
+      playPreviousVideo();
     });
 
     navigator.mediaSession.playbackState = playerState.playing ? 'playing' : 'paused';
@@ -651,7 +758,7 @@ const VideoPlayer = forwardRef(({
       setHandler('nexttrack', null);
       setHandler('previoustrack', null);
     };
-  }, [channelName, onVideoChange, player, playerState.playing, playlistVideos, seekRelative, syncCurrentTime, title, videoId]);
+  }, [channelName, player, playerState.playing, playNextVideo, playPreviousVideo, seekRelative, syncCurrentTime, title, videoId]);
 
   const handleMouseMove = () => {
     if (isTouchDevice) return;
@@ -899,12 +1006,31 @@ const VideoPlayer = forwardRef(({
     }
     lastLoadedVideoIdRef.current = videoId;
     const currentPlayer = playerRef.current;
-    if (currentPlayer && typeof currentPlayer.loadVideoById === 'function') {
-      try {
-        currentPlayer.loadVideoById(videoId);
-        currentPlayer.playVideo();
-      } catch (err) {
-        console.debug('loadVideoById failed', err);
+    if (currentPlayer) {
+      // 若 YouTube 內部當前已經在播放此影片（例如原生播放清單換首），避免重複 loadVideo 破壞清單
+      const currentLoadedId = currentPlayer.getVideoData?.()?.video_id;
+      if (currentLoadedId === videoId) {
+        return;
+      }
+
+      // 若播放器原生清單中包含該影片，優先使用 playVideoAt 保持清單完整
+      const currentPlaylist = currentPlayer.getPlaylist?.();
+      if (Array.isArray(currentPlaylist) && currentPlaylist.includes(videoId)) {
+        try {
+          currentPlayer.playVideoAt(currentPlaylist.indexOf(videoId));
+          return;
+        } catch (e) {
+          console.debug('playVideoAt error in useEffect', e);
+        }
+      }
+
+      if (typeof currentPlayer.loadVideoById === 'function') {
+        try {
+          currentPlayer.loadVideoById(videoId);
+          currentPlayer.playVideo();
+        } catch (err) {
+          console.debug('loadVideoById failed', err);
+        }
       }
     }
   }, [videoId]);
@@ -1244,17 +1370,29 @@ const VideoPlayer = forwardRef(({
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'nowrap' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flexShrink: 1, overflow: 'hidden' }}>
-              <IconButton onClick={togglePlay} sx={{ color: 'white' }} size="small">
-                {playerState.playing ? <FaPause /> : <FaPlay />}
-              </IconButton>
+              <Tooltip title="上一首">
+                <IconButton onClick={playPreviousVideo} sx={{ color: 'white' }} size="small" aria-label="上一首">
+                  <FaStepBackward />
+                </IconButton>
+              </Tooltip>
 
-              <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }} size="small">
+              <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }} size="small" aria-label="快退 10 秒">
                 <FaBackward />
               </IconButton>
 
-              <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }} size="small">
+              <IconButton onClick={togglePlay} sx={{ color: 'white' }} size="small" aria-label={playerState.playing ? '暫停' : '播放'}>
+                {playerState.playing ? <FaPause /> : <FaPlay />}
+              </IconButton>
+
+              <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }} size="small" aria-label="快進 10 秒">
                 <FaForward />
               </IconButton>
+
+              <Tooltip title="下一首">
+                <IconButton onClick={playNextVideo} sx={{ color: 'white' }} size="small" aria-label="下一首">
+                  <FaStepForward />
+                </IconButton>
+              </Tooltip>
 
               <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5, flexShrink: 1 }}>
                 <IconButton onClick={toggleMute} sx={{ color: 'white' }} size="small">
@@ -1426,15 +1564,21 @@ const VideoPlayer = forwardRef(({
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white', p: 0.75 }}>
-                  <FaBackward size={14} />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                <IconButton onClick={playPreviousVideo} sx={{ color: 'white', p: 0.6 }} aria-label="上一首">
+                  <FaStepBackward size={13} />
                 </IconButton>
-                <IconButton onClick={togglePlay} sx={{ color: 'white', p: 0.75 }}>
+                <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white', p: 0.6 }} aria-label="快退 10 秒">
+                  <FaBackward size={13} />
+                </IconButton>
+                <IconButton onClick={togglePlay} sx={{ color: 'white', p: 0.75 }} aria-label={playerState.playing ? '暫停' : '播放'}>
                   {playerState.playing ? <FaPause size={16} /> : <FaPlay size={16} />}
                 </IconButton>
-                <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white', p: 0.75 }}>
-                  <FaForward size={14} />
+                <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white', p: 0.6 }} aria-label="快進 10 秒">
+                  <FaForward size={13} />
+                </IconButton>
+                <IconButton onClick={playNextVideo} sx={{ color: 'white', p: 0.6 }} aria-label="下一首">
+                  <FaStepForward size={13} />
                 </IconButton>
               </Box>
 

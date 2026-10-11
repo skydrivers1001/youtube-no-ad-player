@@ -43,12 +43,18 @@ const PlayerPage = () => {
   const [fetchedVideoMeta, setFetchedVideoMeta] = useState({ title: '', channel: '' });
   const playerRef = useRef(null);
   const [loopEnabled, setLoopEnabled] = useState(false);
+  const loadedPlaylistIdRef = useRef(null);
 
   // 播放清單：偵測到 activePlaylistId 時，載入清單內的影片
   useEffect(() => {
     if (!activePlaylistId) {
+      loadedPlaylistIdRef.current = null;
       setPlaylistVideos([]);
       setPlaylistInfo(null);
+      return undefined;
+    }
+
+    if (loadedPlaylistIdRef.current === activePlaylistId && playlistVideos.length > 0) {
       return undefined;
     }
 
@@ -61,8 +67,9 @@ const PlayerPage = () => {
           youtubeService.getPlaylistVideos(activePlaylistId, accessToken),
         ]);
         if (isCancelled) return;
+        loadedPlaylistIdRef.current = activePlaylistId;
         setPlaylistInfo(info);
-        setPlaylistVideos(videos);
+        setPlaylistVideos(videos || []);
 
         // 從 /watch/playlist/:playlistId 進入且尚未指定影片時，導向第一支
         if (playlistRouteId && !videoId) {
@@ -79,8 +86,6 @@ const PlayerPage = () => {
       } catch (error) {
         if (!isCancelled) {
           console.error('載入播放清單失敗:', error);
-          setPlaylistVideos([]);
-          setPlaylistInfo(null);
           setPlaylistLoadFailed(true);
         }
       }
@@ -90,7 +95,7 @@ const PlayerPage = () => {
     return () => {
       isCancelled = true;
     };
-  }, [accessToken, activePlaylistId, playlistRouteId, videoId, navigate, searchParams]);
+  }, [accessToken, activePlaylistId, playlistRouteId, videoId, navigate, searchParams, playlistVideos.length]);
 
   // 計算目前影片在清單中的 index
   const playlistLabel = playlistInfo?.title || '';
