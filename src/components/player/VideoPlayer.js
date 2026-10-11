@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Alert, Box, Button, IconButton, Slider, Typography, Paper, Tooltip } from '@mui/material';
+import { Alert, Box, Button, IconButton, Slider, Typography, Tooltip, Menu, MenuItem } from '@mui/material';
 import {
   FaPlay,
   FaPause,
@@ -27,9 +27,9 @@ import { recordDataUsage } from '../../store/statisticsSlice';
 const NOTICE_AUTO_HIDE_MS = 3500;
 const ESTIMATED_MB_PER_PLAYBACK_SECOND = 0.12;
 const DATA_USAGE_BATCH_SECONDS = 15;
-const TOUCH_INLINE_CONTROLS_HEIGHT = 116;
+const TOUCH_INLINE_CONTROLS_HEIGHT = 68;
 
-const VideoPlayer = ({
+const VideoPlayer = forwardRef(({
   videoId,
   title = '影片',
   channelName = '頻道',
@@ -40,7 +40,9 @@ const VideoPlayer = ({
   initialVideoIndex = 0,
   playlistLabel = '',
   onVideoChange = null,
-}) => {
+  loopEnabled: externalLoopEnabled,
+  onLoopChange = null,
+}, ref) => {
   const dispatch = useDispatch();
   const settings = useSelector((state) => state.settings);
   const savedProgress = useSelector((state) => selectVideoProgress(state, videoId));
@@ -65,11 +67,12 @@ const VideoPlayer = ({
   const [playbackNotice, setPlaybackNotice] = useState(null);
   const [resumePrompt, setResumePrompt] = useState(null);
   const [playerBrightness, setPlayerBrightness] = useState(1);
-  const [loopEnabled, setLoopEnabled] = useState(false);
-  const loopEnabledRef = useRef(false);
+  const [loopEnabled, setLoopEnabled] = useState(Boolean(externalLoopEnabled));
+  const loopEnabledRef = useRef(Boolean(externalLoopEnabled));
   const currentVideoIndexRef = useRef(initialVideoIndex);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
+  const [speedMenuAnchor, setSpeedMenuAnchor] = useState(null);
   const controlsTimeoutRef = useRef(null);
   const noticeTimeoutRef = useRef(null);
   const backgroundPausedRef = useRef(false);
@@ -141,6 +144,13 @@ const VideoPlayer = ({
   useEffect(() => {
     loopEnabledRef.current = loopEnabled;
   }, [loopEnabled]);
+
+  useEffect(() => {
+    if (externalLoopEnabled !== undefined) {
+      setLoopEnabled(externalLoopEnabled);
+      loopEnabledRef.current = externalLoopEnabled;
+    }
+  }, [externalLoopEnabled]);
 
   useEffect(() => {
     setPlayerBrightness(1);
@@ -601,7 +611,7 @@ const VideoPlayer = ({
     }
   };
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     const currentPlayer = playerRef.current;
     if (!currentPlayer) return;
 
@@ -610,7 +620,7 @@ const VideoPlayer = ({
     } else {
       currentPlayer.playVideo();
     }
-  };
+  }, []);
 
   const handleVolumeChange = (_, newValue) => {
     const currentPlayer = playerRef.current;
@@ -645,13 +655,13 @@ const VideoPlayer = ({
     }
   };
 
-  const setPlaybackRate = (rate) => {
+  const setPlaybackRate = useCallback((rate) => {
     const currentPlayer = playerRef.current;
     if (!currentPlayer) return;
 
     currentPlayer.setPlaybackRate(rate);
     updatePlaybackState((prev) => ({ ...prev, playbackRate: rate }));
-  };
+  }, [updatePlaybackState]);
 
   const toggleFullscreen = async () => {
     const el = containerRef.current;
@@ -708,11 +718,30 @@ const VideoPlayer = ({
     }
   };
 
-  const toggleLoop = () => {
+  const toggleLoop = useCallback(() => {
     const next = !loopEnabledRef.current;
     setLoopEnabled(next);
     loopEnabledRef.current = next;
+    if (onLoopChange) {
+      onLoopChange(next);
+    }
     showNotice(next ? '循環播放已開啟' : '循環播放已關閉', 'info');
+  }, [onLoopChange, showNotice]);
+
+  const handleSpeedMenuOpen = (event) => {
+    event.stopPropagation();
+    setSpeedMenuAnchor(event.currentTarget);
+  };
+
+  const handleSpeedMenuClose = (event) => {
+    event?.stopPropagation?.();
+    setSpeedMenuAnchor(null);
+  };
+
+  const handleSelectSpeed = (rate, event) => {
+    event?.stopPropagation?.();
+    setPlaybackRate(rate);
+    setSpeedMenuAnchor(null);
   };
 
   const handleSeekPreview = (_, newValue) => {
@@ -780,7 +809,7 @@ const VideoPlayer = ({
     }
   };
 
-  const handleTogglePictureInPicture = async () => {
+  const handleTogglePictureInPicture = useCallback(async () => {
     if (!settings.enablePictureInPicture) {
       showNotice('請先在設定頁啟用畫中畫功能', 'warning');
       return;
@@ -803,7 +832,17 @@ const VideoPlayer = ({
     if (!result?.ok) {
       showNotice('無法切換畫中畫模式，請改用瀏覽器原生控制', 'warning');
     }
-  };
+  }, [isPipSupported, isTouchDevice, settings.enablePictureInPicture, showNotice, title, togglePictureInPicture]);
+
+  useImperativeHandle(ref, () => ({
+    toggleLoop,
+    togglePictureInPicture: handleTogglePictureInPicture,
+    togglePlay,
+    setPlaybackRate,
+    isLoopEnabled: () => loopEnabledRef.current,
+    isPipActive,
+    isPipSupported,
+  }), [handleTogglePictureInPicture, isPipActive, isPipSupported, setPlaybackRate, toggleLoop, togglePlay]);
 
   const handleTouchGestureStart = (side, event) => {
     const touch = event.touches?.[0];
@@ -1116,22 +1155,22 @@ const VideoPlayer = ({
             />
           </Box>
 
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-              <IconButton onClick={togglePlay} sx={{ color: 'white' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'nowrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flexShrink: 1, overflow: 'hidden' }}>
+              <IconButton onClick={togglePlay} sx={{ color: 'white' }} size="small">
                 {playerState.playing ? <FaPause /> : <FaPlay />}
               </IconButton>
 
-              <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }}>
+              <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }} size="small">
                 <FaBackward />
               </IconButton>
 
-              <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }}>
+              <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }} size="small">
                 <FaForward />
               </IconButton>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
-                <IconButton onClick={toggleMute} sx={{ color: 'white' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5, flexShrink: 1 }}>
+                <IconButton onClick={toggleMute} sx={{ color: 'white' }} size="small">
                   {playerState.muted ? <FaVolumeMute /> : <FaVolumeUp />}
                 </IconButton>
                 <Slider
@@ -1139,7 +1178,7 @@ const VideoPlayer = ({
                   onChange={handleVolumeChange}
                   aria-label="音量"
                   sx={{
-                    width: 80,
+                    width: { xs: 50, sm: 70, md: 80 },
                     mx: 1,
                     '& .MuiSlider-track': { bgcolor: 'white' },
                     '& .MuiSlider-rail': { bgcolor: 'rgba(255,255,255,0.3)' },
@@ -1147,35 +1186,35 @@ const VideoPlayer = ({
                 />
               </Box>
 
-              <Typography variant="body2" sx={{ color: 'white', mx: 1, whiteSpace: 'nowrap' }}>
+              <Typography variant="caption" sx={{ color: 'white', mx: 0.5, whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                 {formatTime(displayCurrentTime)} / {formatTime(playerState.duration)}
               </Typography>
             </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-              <Box sx={{ display: 'flex', mr: 1 }}>
-                {[0.5, 1, 1.25, 1.5, 2].map((rate) => (
-                  <Tooltip key={rate} title={`${rate}x 速度`}>
-                    <Paper
-                      onClick={() => setPlaybackRate(rate)}
-                      sx={{
-                        px: 1,
-                        py: 0.5,
-                        mx: 0.5,
-                        cursor: 'pointer',
-                        bgcolor: playerState.playbackRate === rate ? 'primary.main' : 'rgba(255,255,255,0.1)',
-                        color: 'white',
-                        fontSize: '0.75rem',
-                      }}
-                    >
-                      {rate}x
-                    </Paper>
-                  </Tooltip>
-                ))}
-              </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, gap: 0.5 }}>
+              <Tooltip title="播放速度">
+                <Button
+                  size="small"
+                  onClick={handleSpeedMenuOpen}
+                  sx={{
+                    color: 'white',
+                    minWidth: 44,
+                    px: 0.8,
+                    py: 0.25,
+                    fontSize: '0.75rem',
+                    bgcolor: 'rgba(255,255,255,0.15)',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' },
+                    borderRadius: 1,
+                    textTransform: 'none',
+                  }}
+                >
+                  {playerState.playbackRate}x
+                </Button>
+              </Tooltip>
 
               <Tooltip title={playerState.subtitlesEnabled ? '關閉字幕' : '開啟字幕'}>
                 <IconButton
+                  size="small"
                   onClick={toggleSubtitles}
                   sx={{
                     color: playerState.subtitlesEnabled ? 'primary.main' : 'white',
@@ -1190,9 +1229,11 @@ const VideoPlayer = ({
 
               <Tooltip title={loopEnabled ? '關閉循環播放' : '開啟循環播放'}>
                 <IconButton
+                  size="small"
                   onClick={toggleLoop}
                   sx={{
                     color: loopEnabled ? 'primary.main' : 'white',
+                    bgcolor: loopEnabled ? 'rgba(25, 118, 210, 0.2)' : 'transparent',
                     '&:hover': {
                       color: loopEnabled ? 'primary.light' : 'grey.300'
                     }
@@ -1204,9 +1245,11 @@ const VideoPlayer = ({
 
               <Tooltip title={isPipActive ? '關閉畫中畫' : isPipSupported ? '開啟畫中畫' : '此瀏覽器不支援畫中畫'}>
                 <IconButton
+                  size="small"
                   onClick={handleTogglePictureInPicture}
                   sx={{
                     color: isPipActive ? 'primary.main' : 'white',
+                    bgcolor: isPipActive ? 'rgba(25, 118, 210, 0.2)' : 'transparent',
                     opacity: isPipSupported ? 1 : 0.5,
                     '&:hover': {
                       color: isPipActive ? 'primary.light' : 'grey.300'
@@ -1218,7 +1261,7 @@ const VideoPlayer = ({
               </Tooltip>
 
               <Tooltip title={playerState.fullscreen ? '退出全螢幕' : '全螢幕'}>
-                <IconButton onClick={toggleFullscreen} sx={{ color: 'white' }}>
+                <IconButton size="small" onClick={toggleFullscreen} sx={{ color: 'white' }}>
                   {playerState.fullscreen ? <FaCompress /> : <FaExpand />}
                 </IconButton>
               </Tooltip>
@@ -1226,6 +1269,43 @@ const VideoPlayer = ({
           </Box>
         </Box>
       )}
+
+      {/* 速度下拉選單 (共用) */}
+      <Menu
+        anchorEl={speedMenuAnchor}
+        open={Boolean(speedMenuAnchor)}
+        onClose={handleSpeedMenuClose}
+        PaperProps={{
+          sx: {
+            bgcolor: 'rgba(24, 24, 27, 0.95)',
+            color: 'white',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            zIndex: 100002,
+          }
+        }}
+      >
+        {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+          <MenuItem
+            key={rate}
+            selected={playerState.playbackRate === rate}
+            onClick={(e) => handleSelectSpeed(rate, e)}
+            sx={{
+              fontSize: '0.85rem',
+              py: 0.8,
+              px: 2,
+              '&.Mui-selected': {
+                bgcolor: 'primary.main',
+                color: 'white',
+                '&:hover': { bgcolor: 'primary.dark' },
+              },
+            }}
+          >
+            {rate}x {rate === 1 ? '(正常)' : ''}
+          </MenuItem>
+        ))}
+      </Menu>
+
         {isTouchDevice && (
           <Box
             sx={{
@@ -1234,74 +1314,107 @@ const VideoPlayer = ({
               right: 0,
               bottom: 0,
               px: 1.5,
-              pt: 1.25,
-              pb: 'calc(10px + env(safe-area-inset-bottom))',
-                minHeight: `${TOUCH_INLINE_CONTROLS_HEIGHT}px`,
-                background: hasInlineTouchControls
-                  ? 'linear-gradient(180deg, rgba(8,12,24,0.94) 0%, rgba(12,18,32,0.98) 100%)'
-                  : 'linear-gradient(transparent, rgba(17,24,39,0.9) 24%, rgba(17,24,39,0.98))',
+              pt: 0.75,
+              pb: 'calc(6px + env(safe-area-inset-bottom))',
+              minHeight: `${TOUCH_INLINE_CONTROLS_HEIGHT}px`,
+              background: hasInlineTouchControls
+                ? 'linear-gradient(180deg, rgba(8,12,24,0.95) 0%, rgba(12,18,32,0.98) 100%)'
+                : 'linear-gradient(transparent, rgba(17,24,39,0.9) 24%, rgba(17,24,39,0.98))',
               color: 'white',
               zIndex: playerState.fullscreen ? 100000 : 3,
-                backdropFilter: 'blur(6px)',
-                borderTop: hasInlineTouchControls ? '1px solid rgba(255,255,255,0.08)' : 'none',
+              backdropFilter: 'blur(6px)',
+              borderTop: hasInlineTouchControls ? '1px solid rgba(255,255,255,0.08)' : 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
             }}
           >
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5, mb: 1 }}>
-              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.78)' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5, mb: 0.5 }}>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem' }}>
                 {formatTime(displayCurrentTime)} / {formatTime(playerState.duration)}
               </Typography>
-                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)' }}>
-                  請使用播放器原生全螢幕
-                </Typography>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem' }}>
+                雙擊兩側快進退
+              </Typography>
             </Box>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white' }}>
-                  <FaBackward />
+                <IconButton onClick={() => seekRelative(-10)} sx={{ color: 'white', p: 0.75 }}>
+                  <FaBackward size={14} />
                 </IconButton>
-                <IconButton onClick={togglePlay} sx={{ color: 'white' }}>
-                  {playerState.playing ? <FaPause /> : <FaPlay />}
+                <IconButton onClick={togglePlay} sx={{ color: 'white', p: 0.75 }}>
+                  {playerState.playing ? <FaPause size={16} /> : <FaPlay size={16} />}
                 </IconButton>
-                <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }}>
-                  <FaForward />
+                <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white', p: 0.75 }}>
+                  <FaForward size={14} />
                 </IconButton>
-                <Tooltip title={loopEnabled ? '關閉循環播放' : '開啟循環播放'}>
-                  <IconButton
-                    onClick={toggleLoop}
-                    sx={{ color: loopEnabled ? 'primary.main' : 'white' }}
-                  >
-                    <FaRedo />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title={isPipActive ? '關閉畫中畫' : isPipSupported ? '開啟畫中畫' : '不支援'}>
-                  <IconButton
-                    onClick={handleTogglePictureInPicture}
-                    sx={{ color: isPipActive ? 'primary.main' : 'white', opacity: isPipSupported ? 1 : 0.5 }}
-                  >
-                    <FaExternalLinkAlt />
-                  </IconButton>
-                </Tooltip>
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.75 }}>
-                {[0.5, 1, 1.25, 1.5, 2].map((rate) => (
-                  <Paper
-                    key={rate}
-                    onClick={() => setPlaybackRate(rate)}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Tooltip title={loopEnabled ? '關閉循環播放' : '開啟循環播放'}>
+                  <Button
+                    size="small"
+                    variant={loopEnabled ? 'contained' : 'outlined'}
+                    color={loopEnabled ? 'primary' : 'inherit'}
+                    onClick={toggleLoop}
                     sx={{
+                      minWidth: 'auto',
                       px: 1,
-                      py: 0.5,
-                      cursor: 'pointer',
-                      bgcolor: playerState.playbackRate === rate ? 'primary.main' : 'rgba(255,255,255,0.08)',
-                      color: 'white',
+                      py: 0.25,
                       fontSize: '0.75rem',
-                      borderRadius: 1.5,
+                      borderColor: 'rgba(255,255,255,0.3)',
+                      color: loopEnabled ? 'white' : 'rgba(255,255,255,0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
                     }}
                   >
-                    {rate}x
-                  </Paper>
-                ))}
+                    <FaRedo size={11} />
+                    循環
+                  </Button>
+                </Tooltip>
+
+                <Tooltip title={isPipActive ? '關閉畫中畫' : isPipSupported ? '開啟畫中畫' : '不支援'}>
+                  <Button
+                    size="small"
+                    variant={isPipActive ? 'contained' : 'outlined'}
+                    color={isPipActive ? 'primary' : 'inherit'}
+                    onClick={handleTogglePictureInPicture}
+                    disabled={!isPipSupported}
+                    sx={{
+                      minWidth: 'auto',
+                      px: 1,
+                      py: 0.25,
+                      fontSize: '0.75rem',
+                      borderColor: 'rgba(255,255,255,0.3)',
+                      color: isPipActive ? 'white' : 'rgba(255,255,255,0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                    }}
+                  >
+                    <FaExternalLinkAlt size={11} />
+                    小窗
+                  </Button>
+                </Tooltip>
+
+                <Button
+                  size="small"
+                  onClick={handleSpeedMenuOpen}
+                  sx={{
+                    minWidth: 'auto',
+                    px: 0.8,
+                    py: 0.25,
+                    fontSize: '0.75rem',
+                    bgcolor: 'rgba(255,255,255,0.12)',
+                    color: 'white',
+                    borderRadius: 1,
+                    textTransform: 'none',
+                  }}
+                >
+                  {playerState.playbackRate}x
+                </Button>
               </Box>
             </Box>
           </Box>
@@ -1309,6 +1422,6 @@ const VideoPlayer = ({
       </Box>
     </Box>
   );
-};
+});
 
 export default VideoPlayer;

@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Paper, Button, Menu, MenuItem, CircularProgress } from '@mui/material';
-import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart, FaShareAlt, FaCopy } from 'react-icons/fa';
+import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart, FaShareAlt, FaCopy, FaRedo, FaExternalLinkAlt } from 'react-icons/fa';
 import VideoPlayer from '../components/player/VideoPlayer';
 import youtubeService from '../services/youtubeService';
 import {
@@ -41,6 +41,8 @@ const PlayerPage = () => {
   const watchHistory = useSelector((state) => state.playlists.watchHistory);
   const accessToken = useSelector((state) => state.auth?.accessToken);
   const [fetchedVideoMeta, setFetchedVideoMeta] = useState({ title: '', channel: '' });
+  const playerRef = useRef(null);
+  const [loopEnabled, setLoopEnabled] = useState(false);
 
   // 播放清單：偵測到 activePlaylistId 時，載入清單內的影片
   useEffect(() => {
@@ -342,6 +344,7 @@ const PlayerPage = () => {
       <Paper elevation={3} sx={{ overflow: 'hidden' }}>
         {/* 視頻播放器 */}
         <VideoPlayer 
+          ref={playerRef}
           videoId={videoId} 
           title={videoTitle}
           channelName={channelName}
@@ -352,6 +355,8 @@ const PlayerPage = () => {
           initialVideoIndex={effectivePlaylistIndex}
           playlistLabel={playlistLabel}
           onVideoChange={handleVideoChange}
+          loopEnabled={loopEnabled}
+          onLoopChange={setLoopEnabled}
         />
         
         {/* 影片信息 */}
@@ -367,6 +372,31 @@ const PlayerPage = () => {
             </Box>
             
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-start' }}>
+              <Button
+                variant={loopEnabled ? 'contained' : 'outlined'}
+                color={loopEnabled ? 'primary' : 'inherit'}
+                startIcon={<FaRedo />}
+                onClick={() => {
+                  if (playerRef.current?.toggleLoop) {
+                    playerRef.current.toggleLoop();
+                  } else {
+                    setLoopEnabled((prev) => !prev);
+                  }
+                }}
+              >
+                {loopEnabled ? '循環播放：開啟' : '循環播放'}
+              </Button>
+
+              <Button
+                variant="outlined"
+                startIcon={<FaExternalLinkAlt />}
+                onClick={() => {
+                  playerRef.current?.togglePictureInPicture?.();
+                }}
+              >
+                畫中畫
+              </Button>
+
               <Button
                 variant={isInWatchLater ? 'contained' : 'outlined'}
                 color={isInWatchLater ? 'warning' : 'inherit'}
