@@ -703,6 +703,70 @@ const youtubeService = {
     };
   },
   
+  // 獲取播放清單資訊（標題、縮圖、影片數、頻道）
+  getPlaylistInfo: async (playlistId, accessToken = null) => {
+    try {
+      const response = await axios.get(
+        'https://www.googleapis.com/youtube/v3/playlists',
+        {
+          params: {
+            part: 'snippet,contentDetails',
+            id: playlistId,
+            ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
+          },
+          headers: getAuthHeaders(accessToken)
+        }
+      );
+
+      const item = response.data.items?.[0];
+      if (item) {
+        return {
+          id: item.id,
+          title: item.snippet.title,
+          thumbnail: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+          videoCount: item.contentDetails.itemCount,
+          channel: item.snippet.channelTitle,
+        };
+      }
+    } catch (error) {
+      console.error('YouTube API 播放清單資訊錯誤:', error);
+    }
+    return null;
+  },
+
+  // 獲取播放清單內的影片（回傳影片資料陣列，依清單順序）
+  getPlaylistVideos: async (playlistId, accessToken = null, maxResults = 50) => {
+    try {
+      const response = await axios.get(
+        'https://www.googleapis.com/youtube/v3/playlistItems',
+        {
+          params: {
+            part: 'snippet,contentDetails',
+            playlistId,
+            maxResults: Math.min(maxResults, 50),
+            ...(accessToken && typeof accessToken === 'string' && accessToken.trim() ? {} : { key: API_KEY })
+          },
+          headers: getAuthHeaders(accessToken)
+        }
+      );
+
+      const items = (response.data.items || [])
+        .filter((item) => item.status?.reason !== 'limitedPrivacy' && item.snippet?.videoId)
+        .map((item) => ({
+          id: item.snippet.videoId,
+          title: item.snippet.title,
+          channel: item.snippet.channelTitle || '未知頻道',
+          thumbnail: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+          position: item.snippet.position || 0,
+        }));
+
+      return items.sort((a, b) => a.position - b.position);
+    } catch (error) {
+      console.error('YouTube API 播放清單影片錯誤:', error);
+      return [];
+    }
+  },
+
   // 獲取相關影片
   getRelatedVideos: async (videoId) => {
     await delay(700);

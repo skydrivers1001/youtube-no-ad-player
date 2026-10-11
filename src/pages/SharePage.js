@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Box, Button, Container, Paper, Typography, CircularProgress } from '@mui/material';
 import { FaHome, FaShare } from 'react-icons/fa';
-import { extractYouTubeVideoIdFromSharePayload } from '../utils/parseYouTubeUrl';
+import { parseYouTubeSharePayload } from '../utils/parseYouTubeUrl';
 
 const isValidVideoId = (videoId) =>
   typeof videoId === 'string' && /^[A-Za-z0-9_-]{11}$/.test(videoId);
+
+const isValidPlaylistId = (playlistId) =>
+  typeof playlistId === 'string' && /^[A-Za-z0-9_-]{10,64}$/.test(playlistId);
 
 const SharePage = () => {
   const location = useLocation();
@@ -19,27 +22,41 @@ const SharePage = () => {
     url: searchParams.get('url') || '',
   }), [searchParams]);
 
-  const videoId = useMemo(
-    () => extractYouTubeVideoIdFromSharePayload(shareInput),
+  const parsed = useMemo(
+    () => parseYouTubeSharePayload(shareInput),
     [shareInput]
   );
 
+  const isVideo = parsed?.type === 'video' && isValidVideoId(parsed.id);
+  const isPlaylist = parsed?.type === 'playlist' && isValidPlaylistId(parsed.id);
+
   useEffect(() => {
-    if (isValidVideoId(videoId)) {
+    if (isVideo) {
       const title = shareInput.title || '';
       const targetSearch = title ? `?title=${encodeURIComponent(title)}` : '';
-      navigate(`/watch/${videoId}${targetSearch}`, { replace: true });
+      navigate(`/watch/${parsed.id}${targetSearch}`, { replace: true });
+      return;
+    }
+
+    if (isPlaylist) {
+      const title = shareInput.title || '';
+      const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+      if (parsed.videoId && isValidVideoId(parsed.videoId)) {
+        navigate(`/watch/${parsed.videoId}?list=${parsed.playlistId}${titleParam}`, { replace: true });
+      } else {
+        navigate(`/watch/playlist/${parsed.playlistId}?list=${parsed.playlistId}${titleParam}`, { replace: true });
+      }
       return;
     }
 
     if (!shareInput.url && !shareInput.text && !shareInput.title) {
       setResolutionError('');
     } else {
-      setResolutionError('無法辨識 YouTube 影片連結');
+      setResolutionError('無法辨識 YouTube 影片或播放清單連結');
     }
-  }, [navigate, shareInput.text, shareInput.title, shareInput.url, videoId]);
+  }, [navigate, parsed, shareInput.text, shareInput.title, shareInput.url, isVideo, isPlaylist]);
 
-  if (isValidVideoId(videoId)) {
+  if (isVideo || isPlaylist) {
     return (
       <Container maxWidth="sm" sx={{ py: 6, textAlign: 'center' }}>
         <CircularProgress sx={{ mb: 3 }} />

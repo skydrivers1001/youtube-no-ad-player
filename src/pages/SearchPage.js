@@ -116,9 +116,7 @@ const SearchPage = () => {
   
   // 處理播放清單點擊
   const handlePlaylistClick = (playlist) => {
-    // 使用播放清單ID作為影片ID，導航到播放器頁面
-    // 在實際應用中，應該先獲取播放清單的影片列表，然後播放第一個影片
-    navigate(`/watch/${playlist.id}?title=${encodeURIComponent(`${playlist.title} 播放清單`)}&channel=${encodeURIComponent(playlist.channel)}`);
+    navigate(`/watch/playlist/${playlist.id}?title=${encodeURIComponent(`${playlist.title} 播放清單`)}&channel=${encodeURIComponent(playlist.channel)}`);
   };
   
   // 渲染搜索結果

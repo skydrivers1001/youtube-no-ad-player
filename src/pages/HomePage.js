@@ -20,7 +20,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { FaYoutube, FaPlay, FaList, FaSearch, FaDownload } from 'react-icons/fa';
 import TrafficDisplay from '../components/statistics/TrafficDisplay';
-import { extractYouTubeVideoId } from '../utils/parseYouTubeUrl';
+import { parseYouTubeInput } from '../utils/parseYouTubeUrl';
 
 const HomePage = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -87,7 +87,7 @@ const HomePage = () => {
     e.preventDefault();
     
     if (!youtubeUrl.trim()) {
-      setError('請輸入 YouTube 影片網址');
+      setError('請輸入 YouTube 影片或播放清單網址');
       return;
     }
     
@@ -96,7 +96,19 @@ const HomePage = () => {
                         youtubeUrl.includes('localhost:3000');
     
     if (isOwnSiteUrl) {
-      // 如果是網站本身的網址，檢查是否包含影片 ID
+      // 如果是網站本身的播放清單網址
+      if (youtubeUrl.includes('/watch/playlist/')) {
+        const parts = youtubeUrl.split('/watch/playlist/');
+        if (parts[1]) {
+          const listId = parts[1].split('?')[0].split('#')[0];
+          if (listId) {
+            setError('');
+            navigate(`/watch/playlist/${listId}`);
+            return;
+          }
+        }
+      }
+      // 如果是網站本身的影片網址，檢查是否包含影片 ID
       const urlParts = youtubeUrl.split('/watch/');
       if (urlParts.length > 1 && urlParts[1]) {
         const videoId = urlParts[1].split('?')[0].split('#')[0]; // 移除查詢參數和錨點
@@ -112,13 +124,21 @@ const HomePage = () => {
       return;
     }
     
-    const videoId = extractYouTubeVideoId(youtubeUrl);
+    const parsed = parseYouTubeInput(youtubeUrl);
     
-    if (videoId) {
+    if (parsed) {
       setError('');
-      navigate(`/watch/${videoId}`);
+      if (parsed.type === 'playlist') {
+        if (parsed.videoId) {
+          navigate(`/watch/${parsed.videoId}?list=${parsed.playlistId}`);
+        } else {
+          navigate(`/watch/playlist/${parsed.playlistId}`);
+        }
+      } else {
+        navigate(`/watch/${parsed.videoId}`);
+      }
     } else {
-      setError('無效的 YouTube 影片網址');
+      setError('無效的 YouTube 影片或播放清單網址');
     }
   };
 
@@ -324,7 +344,7 @@ const HomePage = () => {
               <TextField
                 fullWidth
                 variant="outlined"
-                placeholder="貼上 YouTube 影片網址"
+                placeholder="貼上 YouTube 影片或播放清單網址"
                 value={youtubeUrl}
                 onChange={(e) => setYoutubeUrl(e.target.value)}
                 error={!!error}

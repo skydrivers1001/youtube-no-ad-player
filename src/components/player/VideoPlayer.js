@@ -35,6 +35,11 @@ const VideoPlayer = ({
   channelName = '頻道',
   onReady,
   autoplay = true,
+  playlistId = null,
+  playlistVideos = [],
+  initialVideoIndex = 0,
+  playlistLabel = '',
+  onVideoChange = null,
 }) => {
   const dispatch = useDispatch();
   const settings = useSelector((state) => state.settings);
@@ -62,6 +67,7 @@ const VideoPlayer = ({
   const [playerBrightness, setPlayerBrightness] = useState(1);
   const [loopEnabled, setLoopEnabled] = useState(false);
   const loopEnabledRef = useRef(false);
+  const currentVideoIndexRef = useRef(initialVideoIndex);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
   const controlsTimeoutRef = useRef(null);
@@ -145,6 +151,10 @@ const VideoPlayer = ({
     setLoopEnabled(false);
     loopEnabledRef.current = false;
   }, [videoId]);
+
+  useEffect(() => {
+    currentVideoIndexRef.current = initialVideoIndex;
+  }, [initialVideoIndex]);
 
   useEffect(() => {
     if (!isSeeking) {
@@ -233,7 +243,7 @@ const VideoPlayer = ({
     height: '100%',
     width: '100%',
     playerVars: {
-        autoplay: shouldAutoplayOnLoad ? 1 : 0,
+      autoplay: shouldAutoplayOnLoad ? 1 : 0,
       controls: isTouchDevice ? 1 : 0,
       rel: 0,
       showinfo: 0,
@@ -242,9 +252,11 @@ const VideoPlayer = ({
       cc_load_policy: settings.defaultSubtitlesEnabled ? 1 : 0,
       hl: settings.defaultSubtitleLanguage === 'auto' ? 'zh-TW' : settings.defaultSubtitleLanguage,
       playsinline: 1,
+      ...(playlistId ? { listType: 'playlist', list: playlistId } : {}),
     },
   }), [
     isTouchDevice,
+    playlistId,
     settings.defaultSubtitleLanguage,
     settings.defaultSubtitlesEnabled,
     shouldAutoplayOnLoad,
@@ -335,6 +347,17 @@ const VideoPlayer = ({
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     }
 
+    if (isPlaying && onVideoChange) {
+      const videoData = ytPlayer.getVideoData?.();
+      if (videoData?.video_id && videoId && videoData.video_id !== videoId) {
+        onVideoChange({
+          id: videoData.video_id,
+          title: videoData.title || title,
+          channel: videoData.author || channelName,
+        });
+      }
+    }
+
     if (!isPlaying) {
       flushPendingUsage();
       lastPlaybackSampleRef.current = ytPlayer.getCurrentTime?.() || 0;
@@ -349,9 +372,43 @@ const VideoPlayer = ({
       if (loopEnabledRef.current) {
         ytPlayer.seekTo(0, true);
         ytPlayer.playVideo();
+        return;
+      }
+      // 播放清單自動進下一支
+      const nextIndex = currentVideoIndexRef.current + 1;
+      if (playlistVideos.length > 0 && nextIndex < playlistVideos.length) {
+        const nextVideo = playlistVideos[nextIndex];
+        if (nextVideo?.id) {
+          currentVideoIndexRef.current = nextIndex;
+          dispatch(clearVideoProgress({ videoId }));
+          if (playlistLabel) {
+            showNotice(`播放清單 (${nextIndex + 1}/${playlistVideos.length})`, 'info');
+          }
+          if (onVideoChange) {
+            onVideoChange(nextVideo, nextIndex);
+          } else {
+            ytPlayer.loadVideoById(nextVideo.id);
+            ytPlayer.playVideo();
+          }
+          return;
+        }
+      }
+      if (playlistVideos.length > 0 && nextIndex >= playlistVideos.length && playlistVideos.length > 1) {
+        // 循環清單
+        currentVideoIndexRef.current = 0;
+        if (playlistLabel) {
+          showNotice(`播放清單循環 (1/${playlistVideos.length})`, 'info');
+        }
+        if (onVideoChange) {
+          onVideoChange(playlistVideos[0], 0);
+        } else {
+          ytPlayer.loadVideoById(playlistVideos[0].id);
+          ytPlayer.playVideo();
+        }
+        return;
       }
     }
-  }, [dispatch, flushPendingUsage, updatePlaybackState, videoId]);
+  }, [dispatch, flushPendingUsage, updatePlaybackState, videoId, playlistVideos, onVideoChange, title, channelName, playlistLabel, showNotice]);
 
   useEffect(() => {
     if (!player) return;

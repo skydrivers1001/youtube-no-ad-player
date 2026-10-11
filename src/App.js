@@ -78,6 +78,7 @@ function App() {
                   <Route path="/" element={<HomePage />} />
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/share" element={<SharePage />} />
+                  <Route path="/watch/playlist/:playlistId" element={<PlayerPage />} />
                   <Route path="/watch/:videoId" element={<PlayerPage />} />
                   <Route path="/playlists" element={<PlaylistsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />

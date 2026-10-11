@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Box, Typography, Container, Paper, Button, Menu, MenuItem } from '@mui/material';
+import { Box, Typography, Container, Paper, Button, Menu, MenuItem, CircularProgress } from '@mui/material';
 import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart, FaShareAlt, FaCopy } from 'react-icons/fa';
 import VideoPlayer from '../components/player/VideoPlayer';
 import youtubeService from '../services/youtubeService';
@@ -16,13 +16,23 @@ import {
 const hasMeaningfulValue = (value, fallbackLabel) => Boolean(value && value !== fallbackLabel);
 
 const PlayerPage = () => {
-  const { videoId } = useParams();
+  const { videoId, playlistId: playlistRouteId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  
+
   const urlVideoTitle = searchParams.get('title');
   const urlChannelName = searchParams.get('channel');
+
+  // 從 /watch/playlist/:playlistId 進入時，playlistRouteId 就是清單 ID
+  const activePlaylistId = playlistRouteId || searchParams.get('list');
+
+  // 播放清單狀態
+  const [playlistVideos, setPlaylistVideos] = useState([]);
+  const [playlistInfo, setPlaylistInfo] = useState(null);
+  const [currentPlaylistIndex, setCurrentPlaylistIndex] = useState(0);
+  const [playlistLoadFailed, setPlaylistLoadFailed] = useState(false);
   
   // 從Redux獲取設置和播放清單
   const settings = useSelector((state) => state.settings);
@@ -31,6 +41,67 @@ const PlayerPage = () => {
   const watchHistory = useSelector((state) => state.playlists.watchHistory);
   const accessToken = useSelector((state) => state.auth?.accessToken);
   const [fetchedVideoMeta, setFetchedVideoMeta] = useState({ title: '', channel: '' });
+
+  // 播放清單：偵測到 activePlaylistId 時，載入清單內的影片
+  useEffect(() => {
+    if (!activePlaylistId) {
+      setPlaylistVideos([]);
+      setPlaylistInfo(null);
+      return undefined;
+    }
+
+    let isCancelled = false;
+    setPlaylistLoadFailed(false);
+    const loadPlaylist = async () => {
+      try {
+        const [info, videos] = await Promise.all([
+          youtubeService.getPlaylistInfo(activePlaylistId, accessToken),
+          youtubeService.getPlaylistVideos(activePlaylistId, accessToken),
+        ]);
+        if (isCancelled) return;
+        setPlaylistInfo(info);
+        setPlaylistVideos(videos);
+
+        // 從 /watch/playlist/:playlistId 進入且尚未指定影片時，導向第一支
+        if (playlistRouteId && !videoId) {
+          if (videos.length > 0) {
+            const startIndex = Math.max(0, Number(searchParams.get('index') || 0));
+            const firstVideo = videos[Math.min(startIndex, videos.length - 1)];
+            if (firstVideo) {
+              navigate(`/watch/${firstVideo.id}?list=${activePlaylistId}`, { replace: true });
+            }
+          } else {
+            setPlaylistLoadFailed(true);
+          }
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.error('載入播放清單失敗:', error);
+          setPlaylistVideos([]);
+          setPlaylistInfo(null);
+          setPlaylistLoadFailed(true);
+        }
+      }
+    };
+
+    loadPlaylist();
+    return () => {
+      isCancelled = true;
+    };
+  }, [accessToken, activePlaylistId, playlistRouteId, videoId, navigate, searchParams]);
+
+  // 計算目前影片在清單中的 index
+  const playlistLabel = playlistInfo?.title || '';
+  const effectivePlaylistIndex = useMemo(() => {
+    if (!playlistVideos.length) return 0;
+    const idx = playlistVideos.findIndex((v) => v.id === videoId);
+    return idx >= 0 ? idx : 0;
+  }, [playlistVideos, videoId]);
+
+  // 當播放清單切換時，同步 index 狀態
+  useEffect(() => {
+    setCurrentPlaylistIndex(effectivePlaylistIndex);
+  }, [effectivePlaylistIndex]);
 
   const cachedVideoInfo = useMemo(() => {
     const playedVideo = recentlyPlayed.find((video) => video.id === videoId);
@@ -205,6 +276,45 @@ const PlayerPage = () => {
       return () => clearTimeout(timer);
     }
   }, [settings.sleepTimerMinutes]);
+
+  const handleVideoChange = useCallback((nextVideo) => {
+    if (!nextVideo?.id) return;
+    const listParam = activePlaylistId ? `?list=${activePlaylistId}` : '';
+    const titleParam = nextVideo.title ? `&title=${encodeURIComponent(nextVideo.title)}` : '';
+    const channelParam = nextVideo.channel ? `&channel=${encodeURIComponent(nextVideo.channel)}` : '';
+    navigate(`/watch/${nextVideo.id}${listParam}${titleParam}${channelParam}`, { replace: true });
+  }, [activePlaylistId, navigate]);
+
+  if (playlistRouteId && !videoId) {
+    if (playlistLoadFailed) {
+      return (
+        <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
+          <Paper elevation={3} sx={{ p: 4 }}>
+            <Typography variant="h6" color="error" gutterBottom>
+              無法載入播放清單內容
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              清單可能為私人清單、已刪除，或 YouTube API 配額受限。
+            </Typography>
+            <Button variant="contained" onClick={() => navigate('/')}>
+              回到首頁
+            </Button>
+          </Paper>
+        </Container>
+      );
+    }
+    return (
+      <Container maxWidth="lg" sx={{ py: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <CircularProgress />
+        <Typography variant="h6">正在載入播放清單...</Typography>
+        {playlistInfo?.title && (
+          <Typography variant="body2" color="text.secondary">
+            {playlistInfo.title}
+          </Typography>
+        )}
+      </Container>
+    );
+  }
   
   return (
     <Container maxWidth="lg" sx={{ py: 2 }}>
@@ -216,6 +326,11 @@ const PlayerPage = () => {
           channelName={channelName}
           onReady={handlePlayerReady}
           autoplay={settings.autoplayVideos}
+          playlistId={activePlaylistId}
+          playlistVideos={playlistVideos}
+          initialVideoIndex={effectivePlaylistIndex}
+          playlistLabel={playlistLabel}
+          onVideoChange={handleVideoChange}
         />
         
         {/* 影片信息 */}
@@ -288,6 +403,44 @@ const PlayerPage = () => {
                 </MenuItem>
               ))}
             </Menu>
+
+            {playlistVideos.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  {playlistLabel ? `播放清單：${playlistLabel}` : '播放清單'}（{currentPlaylistIndex + 1} / {playlistVideos.length}）
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, mt: 1, overflowX: 'auto', pb: 1 }}>
+                  {playlistVideos.map((video, index) => (
+                    <Box
+                      key={video.id}
+                      onClick={() => navigate(`/watch/${video.id}?list=${activePlaylistId}`)}
+                      sx={{
+                        flexShrink: 0,
+                        width: 140,
+                        cursor: 'pointer',
+                        border: index === currentPlaylistIndex ? 2 : 1,
+                        borderColor: index === currentPlaylistIndex ? 'primary.main' : 'divider',
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        bgcolor: 'background.paper',
+                      }}
+                    >
+                      <Box sx={{ position: 'relative' }}>
+                        <img src={video.thumbnail} alt={video.title} style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }} />
+                      </Box>
+                      <Box sx={{ p: 0.75 }}>
+                        <Typography variant="caption" noWrap sx={{ display: 'block', maxWidth: 130 }}>
+                          {video.title}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: 130 }}>
+                          {video.channel}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
           </Box>
         </Box>
       </Paper>

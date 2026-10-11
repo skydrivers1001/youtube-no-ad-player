@@ -9,6 +9,7 @@ export const APP_ROUTES = {
   SEARCH: '/search',
   SHARE: '/share',
   WATCH: '/watch/:videoId',
+  PLAYLIST_WATCH: '/watch/playlist/:playlistId',
   PLAYLISTS: '/playlists',
   SETTINGS: '/settings',
   OAUTH_CALLBACK: '/auth/google/callback'
@@ -33,6 +34,11 @@ export const DYNAMIC_ROUTES = {
     pattern: /^\/watch\/([a-zA-Z0-9_-]{11})$/,
     template: APP_ROUTES.WATCH,
     paramName: 'videoId'
+  },
+  PLAYLIST_WATCH: {
+    pattern: /^\/watch\/playlist\/([a-zA-Z0-9_-]+)$/,
+    template: APP_ROUTES.PLAYLIST_WATCH,
+    paramName: 'playlistId'
   }
 };
 
@@ -53,6 +59,12 @@ export const ROUTE_META = {
   [APP_ROUTES.WATCH]: {
     title: '播放影片 - YouTube No AD Player',
     description: '觀看 YouTube 影片',
+    requiresAuth: false,
+    preload: false
+  },
+  [APP_ROUTES.PLAYLIST_WATCH]: {
+    title: '播放清單 - YouTube No AD Player',
+    description: '觀看 YouTube 播放清單',
     requiresAuth: false,
     preload: false
   },
