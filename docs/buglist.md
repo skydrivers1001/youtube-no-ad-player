@@ -421,3 +421,136 @@ This document records known bugs and their resolutions for future reference.
 ### Follow-ups
 - 新增或升級 MUI 元件時，避免繼續使用已棄用的 Legacy Grid `item/xs/sm/md` API。
 - 可加入首頁三種 viewport 的視覺回歸測試，覆蓋單張、多張、長標題與不同縮圖尺寸情境。
+
+---
+
+## BUG-012: 桌機播放器控制列按鈕寬度不足導致擠壓重疊
+
+- Date: 2026-10-11
+- Status: Fixed
+- Affected route(s): `/watch/:videoId`
+- Affected component(s): `src/components/player/VideoPlayer.js`
+
+### Symptoms
+- 桌機版在螢幕尺寸適中、視窗非最大化或分屏瀏覽時，播放器底欄的按鈕擠成一團。
+- 5 個平鋪倍速按鈕、字幕、循環、畫中畫、全螢幕按鈕與左側的時間文字及音量滑桿互相覆蓋重疊。
+
+### Root Cause
+- 原本在控制列右側將 5 個倍速按鈕（`0.5x, 1x, 1.25x, 1.5x, 2x`）全部平鋪展開，佔用了超過 180px 的寬度。
+- 外層 Flex 容器為 `gap: 2`，左側區塊與右側區塊未設定最小收縮防護（`minWidth: 0`, `flexShrink`），導致容器寬度不足時右側按鈕群直接侵入左側區塊。
+
+### Fix Implemented
+- 將 5 個平鋪的倍速按鈕改為單一倍速切換按鈕，點擊時彈出 Material-UI `Menu` 下拉選單供使用者挑選倍速（支援 0.5x ~ 2x），一次省下逾 150px 橫向空間。
+- 容器外層設定 `flexWrap: 'nowrap'`，左側區塊設定 `minWidth: 0, flexShrink: 1`，音量滑桿使用響應式寬度（50px ~ 80px），時間文字設定字級與 `whiteSpace: 'nowrap'`，徹底杜絕組件重疊。
+
+### Validation
+- 經不同視窗寬度測試，控制列左右側維持清楚間距，倍速選單點擊展開選擇正常，不再有任何按鈕重疊擠壓情況。
+- `npm run build` 通過。
+
+---
+
+## BUG-013: 手機版播放器自訂功能（循環播放、畫中畫）不易存取與可見度不足
+
+- Date: 2026-10-11
+- Status: Fixed (待行動端平台能力持續優化)
+- Affected route(s): `/watch/:videoId`
+- Affected component(s): `src/components/player/VideoPlayer.js`, `src/pages/PlayerPage.js`
+
+### Symptoms
+- 手機用戶反映在手機上看影片時看不到新加入的「循環播放」與「畫中畫」功能，無法點擊操作。
+
+### Root Cause
+- 手機端螢幕寬度較窄（約 375px ~ 390px），原本在播放器底部的觸控操作條也平鋪了 5 個倍速按鈕，導致單行空間不足發生折行，按鈕被擠出可視範圍或被截斷。
+- 行動版 YouTube iframe 原生觸控事件容易與自訂覆蓋層產生互動衝突，手機用戶通常習慣在影片正下方的操作列（稍後觀看、收藏等）進行操作，而非播放器內部細小的按鈕。
+
+### Fix Implemented
+- 在 `PlayerPage.js` 的影片資訊操作列（稍後觀看、收藏同排）直接新增【循環播放】與【畫中畫】實體按鈕。
+- 在 `VideoPlayer.js` 使用 `forwardRef` 與 `useImperativeHandle` 對外提供 `toggleLoop`、`togglePictureInPicture` 等 API，使外層按鈕能直接操控播放器，並透過受控狀態雙向同步循環開啟狀態。
+- 將 `VideoPlayer.js` 手機觸控控制欄重構為緊湊排版，倍速同樣改為下拉選單，按鈕緊湊不折行。
+
+### Validation
+- 手機版開啟頁面時，影片標題正下方清晰可見【循環播放】與【畫中畫】按鈕，點擊能正確切換循環狀態並高亮。
+- 播放器內部觸控條與外部按鈕狀態即時連動。
+
+### Follow-ups (未盡事宜)
+- 行動端瀏覽器（尤其是 iOS Safari）對 `documentPictureInPicture` API 支援度有限，後續需針對不支援的裝置提供清楚的「此裝置瀏覽器不支援」提示或嘗試原生 `<video>` 畫中畫降級方案。
+
+---
+
+## BUG-014: PWA 與手機瀏覽器強烈快取導致程式碼更新無法即時反映
+
+- Date: 2026-10-11
+- Status: In Progress (已實施基礎防快取機制，待增強主動提示)
+- Affected route(s): All routes
+- Affected component(s): `public/index.html`, `public/sw.js`
+
+### Symptoms
+- 程式修正推送至伺服器並部署後，手機用戶開啟網頁或 PWA App 依然看到舊版畫面，必須手動多次關閉重開或清除快取。
+
+### Root Cause
+- 專案註冊了 PWA Service Worker（`public/sw.js`），且手機瀏覽器（iOS Safari / Android Chrome）對靜態 HTML 檔案有高度磁碟快取（Disk Cache）機制。
+- 當使用者直接訪問時，瀏覽器優先讀取快取的 `index.html`，導向舊版本的 JavaScript 資源 bundle。
+
+### Fix Implemented
+- 在 `public/index.html` 的 `<head>` 區段加入 `Cache-Control: no-cache, no-store, must-revalidate`、`Pragma: no-cache`、`Expires: 0` 標籤，強制瀏覽器抓取最新 HTML 入口。
+- 在 `public/sw.js` 的 `activate` 事件中加入自動清除所有舊 Cache 儲存區的邏輯（`caches.keys().then(...)`）。
+- 在 `public/index.html` 的 Service Worker 註冊回呼中加入 `reg.update()`，確保每次載入都主動向伺服器檢查 Service Worker 是否有更新版本。
+
+### Follow-ups (未盡事宜)
+- 目前若使用者透過已安裝的 PWA App 開啟，仍依賴 Service Worker 重新啟動生命週期生效。建議後續新增前端版本比對或 Service Worker 更新廣播（BroadcastChannel），當偵測到新版本時在畫面上彈出 Snackbar 提示「發現新版本，點擊立即更新」，大幅提升使用者體驗。
+
+---
+
+## BUG-015: 單部影片網址帶播放清單參數時未能自動連續播放下一部
+
+- Date: 2026-10-11
+- Status: Open (未盡事項)
+- Affected route(s): `/watch/:videoId?list=:playlistId`
+- Affected component(s): `src/pages/PlayerPage.js`, `src/services/youtubeService.js`
+
+### Symptoms
+- 使用者從 YouTube 複製特定影片網址（格式如 `https://www.youtube.com/watch?v=xxx&list=PLxxx`）貼入播放時，當前影片播放完畢後，不會自動繼續播放該清單中的下一部影片。
+
+### Root Cause
+- 目前系統在處理單一影片網址時，若僅解析出 `videoId`，播放器僅能載入單部影片；雖然 URL 中附帶有 `list` 參數，但前端尚未在背景自動觸發 `getPlaylistVideos` 將整個播放清單下載並組裝成播放佇列（Queue）。
+- 當 YouTube Data API 配額受限或失效時，無法僅靠 oEmbed 一次性取得完整清單內容，需要額外的解析或降級機制。
+
+### Proposed Fix / Action Items
+- 在 `PlayerPage` 載入時檢測 URL 是否含有 `list` 參數：
+  1. 若有 `list` 參數且當前未載入 `playlistVideos`，於背景自動呼叫 `youtubeService.getPlaylistVideos(listId)`。
+  2. 取得清單後，以當前 `videoId` 匹配清單索引（`currentIndex`），構建播放隊列。
+  3. 當影片觸發 `onEnded` 時，自動無縫切換到下一部影片。
+- 若 YouTube API 失敗（配額限制），應在介面上提示使用者「清單自動連播受限，目前僅能播放本部影片」。
+
+---
+
+## BUG-016: YouTube Data API 配額受限或私人/無效清單時缺乏清晰錯誤降級
+
+- Date: 2026-10-11
+- Status: Open (未盡事項)
+- Affected route(s): `/playlists`, `/watch`
+- Affected component(s): `src/services/youtubeService.js`, `src/pages/PlayerPage.js`
+
+### Symptoms
+- 當使用者輸入私人清單、無效清單，或每日 YouTube Data API 查詢配額（Quota）用盡時，畫面直接顯示紅色警示「無法載入播放清單內容」，體驗較為中斷。
+
+### Proposed Fix / Action Items
+- 區分「API 配額受限（Quota Exceeded）」與「私人/無效清單」的錯誤原因，給予精確的 UI 指引（如提供手動備用 API Key 輸入，或建議改貼單部影片網址）。
+- 建立本機已抓取清單資料的 LocalStorage / IndexedDB 快取備份，在 API 配額超限時仍能播放先前曾存取過的清單。
+
+---
+
+## BUG-017: 行動裝置瀏覽器自動播放限制（Autoplay Policy）對清單連播的阻擋
+
+- Date: 2026-10-11
+- Status: Open (未盡事項)
+- Affected route(s): `/watch/:videoId`
+- Affected component(s): `src/components/player/VideoPlayer.js`
+
+### Symptoms
+- 在手機瀏覽器（iOS Safari / Android Chrome）觀看播放清單時，當前一部影片結束、自動切換到下一部影片時，瀏覽器可能會因為沒有當前使用者手勢互動（User Gesture）而阻擋未靜音影片的自動播放，導致播放器停在第 0 秒靜止。
+
+### Proposed Fix / Action Items
+- 在觸發下一部影片播放時捕獲播放失敗錯誤（例如 `NotAllowedError`）。
+- 方案 A：降級為先靜音自動播放，並在畫面中央顯示「點擊解除靜音」提示按鈕。
+- 方案 B：在影片切換時若被阻擋，彈出顯眼的「播放下一部」快速點擊按鈕，引導使用者點擊一下手勢以繼續播放。
