@@ -11,7 +11,8 @@ import {
   FaForward,
   FaBackward,
   FaExternalLinkAlt,
-  FaClosedCaptioning
+  FaClosedCaptioning,
+  FaRedo
 } from 'react-icons/fa';
 import YouTube from 'react-youtube';
 import usePictureInPicture from '../../hooks/usePictureInPicture';
@@ -59,6 +60,8 @@ const VideoPlayer = ({
   const [playbackNotice, setPlaybackNotice] = useState(null);
   const [resumePrompt, setResumePrompt] = useState(null);
   const [playerBrightness, setPlayerBrightness] = useState(1);
+  const [loopEnabled, setLoopEnabled] = useState(false);
+  const loopEnabledRef = useRef(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
   const controlsTimeoutRef = useRef(null);
@@ -130,12 +133,17 @@ const VideoPlayer = ({
   }, []);
 
   useEffect(() => {
-    setResumePrompt(null);
+    loopEnabledRef.current = loopEnabled;
+  }, [loopEnabled]);
+
+  useEffect(() => {
     setPlayerBrightness(1);
     setIsSeeking(false);
     setSeekValue(0);
     lastPlaybackSampleRef.current = 0;
     pendingUsageSecondsRef.current = 0;
+    setLoopEnabled(false);
+    loopEnabledRef.current = false;
   }, [videoId]);
 
   useEffect(() => {
@@ -210,7 +218,6 @@ const VideoPlayer = ({
   const {
     isPipSupported,
     isPipActive,
-    supportMode,
     togglePictureInPicture
   } = usePictureInPicture({
     enabled: settings.enablePictureInPicture,
@@ -338,6 +345,10 @@ const VideoPlayer = ({
       const duration = ytPlayer.getDuration?.() || 0;
       if (duration > 0 && currentTime / duration > 0.95) {
         dispatch(markVideoCompleted({ videoId }));
+      }
+      if (loopEnabledRef.current) {
+        ytPlayer.seekTo(0, true);
+        ytPlayer.playVideo();
       }
     }
   }, [dispatch, flushPendingUsage, updatePlaybackState, videoId]);
@@ -621,6 +632,13 @@ const VideoPlayer = ({
     } catch (error) {
       console.log('字幕控制錯誤:', error);
     }
+  };
+
+  const toggleLoop = () => {
+    const next = !loopEnabledRef.current;
+    setLoopEnabled(next);
+    loopEnabledRef.current = next;
+    showNotice(next ? '循環播放已開啟' : '循環播放已關閉', 'info');
   };
 
   const handleSeekPreview = (_, newValue) => {
@@ -1096,16 +1114,34 @@ const VideoPlayer = ({
                 </IconButton>
               </Tooltip>
 
-              {settings.enablePictureInPicture && (
-                <Tooltip title={isPipActive ? '關閉畫中畫' : supportMode === 'document' ? '開啟畫中畫' : '顯示畫中畫說明'}>
-                  <IconButton
-                    onClick={handleTogglePictureInPicture}
-                    sx={{ color: isPipActive ? 'primary.main' : 'white' }}
-                  >
-                    <FaExternalLinkAlt />
-                  </IconButton>
-                </Tooltip>
-              )}
+              <Tooltip title={loopEnabled ? '關閉循環播放' : '開啟循環播放'}>
+                <IconButton
+                  onClick={toggleLoop}
+                  sx={{
+                    color: loopEnabled ? 'primary.main' : 'white',
+                    '&:hover': {
+                      color: loopEnabled ? 'primary.light' : 'grey.300'
+                    }
+                  }}
+                >
+                  <FaRedo />
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title={isPipActive ? '關閉畫中畫' : isPipSupported ? '開啟畫中畫' : '此瀏覽器不支援畫中畫'}>
+                <IconButton
+                  onClick={handleTogglePictureInPicture}
+                  sx={{
+                    color: isPipActive ? 'primary.main' : 'white',
+                    opacity: isPipSupported ? 1 : 0.5,
+                    '&:hover': {
+                      color: isPipActive ? 'primary.light' : 'grey.300'
+                    }
+                  }}
+                >
+                  <FaExternalLinkAlt />
+                </IconButton>
+              </Tooltip>
 
               <Tooltip title={playerState.fullscreen ? '退出全螢幕' : '全螢幕'}>
                 <IconButton onClick={toggleFullscreen} sx={{ color: 'white' }}>
@@ -1156,6 +1192,22 @@ const VideoPlayer = ({
                 <IconButton onClick={() => seekRelative(10)} sx={{ color: 'white' }}>
                   <FaForward />
                 </IconButton>
+                <Tooltip title={loopEnabled ? '關閉循環播放' : '開啟循環播放'}>
+                  <IconButton
+                    onClick={toggleLoop}
+                    sx={{ color: loopEnabled ? 'primary.main' : 'white' }}
+                  >
+                    <FaRedo />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={isPipActive ? '關閉畫中畫' : isPipSupported ? '開啟畫中畫' : '不支援'}>
+                  <IconButton
+                    onClick={handleTogglePictureInPicture}
+                    sx={{ color: isPipActive ? 'primary.main' : 'white', opacity: isPipSupported ? 1 : 0.5 }}
+                  >
+                    <FaExternalLinkAlt />
+                  </IconButton>
+                </Tooltip>
               </Box>
 
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.75 }}>
