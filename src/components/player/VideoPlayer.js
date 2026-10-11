@@ -70,6 +70,8 @@ const VideoPlayer = forwardRef(({
   const [loopEnabled, setLoopEnabled] = useState(Boolean(externalLoopEnabled));
   const loopEnabledRef = useRef(Boolean(externalLoopEnabled));
   const currentVideoIndexRef = useRef(initialVideoIndex);
+  const initialVideoIdRef = useRef(videoId);
+  const lastLoadedVideoIdRef = useRef(videoId);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
   const [speedMenuAnchor, setSpeedMenuAnchor] = useState(null);
@@ -248,12 +250,11 @@ const VideoPlayer = forwardRef(({
     onExit: handlePipExit,
   });
 
-  const shouldAutoplayOnLoad = initialAutoplayRef.current.enabled;
   const opts = useMemo(() => ({
     height: '100%',
     width: '100%',
     playerVars: {
-      autoplay: shouldAutoplayOnLoad ? 1 : 0,
+      autoplay: 1,
       controls: isTouchDevice ? 1 : 0,
       rel: 0,
       showinfo: 0,
@@ -269,7 +270,6 @@ const VideoPlayer = forwardRef(({
     playlistId,
     settings.defaultSubtitleLanguage,
     settings.defaultSubtitlesEnabled,
-    shouldAutoplayOnLoad,
   ]);
 
   const playerStyle = useMemo(() => ({
@@ -314,7 +314,7 @@ const VideoPlayer = forwardRef(({
     lastPlaybackSampleRef.current = newTime;
   }, [syncCurrentTime]);
 
-    const handleReady = useCallback((event) => {
+  const handleReady = useCallback((event) => {
     const ytPlayer = event.target;
     setPlayer(ytPlayer);
     playerRef.current = ytPlayer;
@@ -329,12 +329,26 @@ const VideoPlayer = forwardRef(({
     lastPlaybackSampleRef.current = ytPlayer.getCurrentTime?.() || 0;
     pendingUsageSecondsRef.current = 0;
 
+    if (lastLoadedVideoIdRef.current && lastLoadedVideoIdRef.current !== initialVideoIdRef.current) {
+      try {
+        ytPlayer.loadVideoById(lastLoadedVideoIdRef.current);
+      } catch (e) {
+        console.debug('handleReady loadVideoById error', e);
+      }
+    }
+
     if (savedProgress && savedProgress.currentTime > 5) {
-        setResumePrompt({
-          currentTime: savedProgress.currentTime,
-          duration: savedProgress.duration,
-          shouldAutoplay: autoplay,
-        });
+      setResumePrompt({
+        currentTime: savedProgress.currentTime,
+        duration: savedProgress.duration,
+        shouldAutoplay: autoplay,
+      });
+    } else if (autoplay) {
+      try {
+        ytPlayer.playVideo();
+      } catch (e) {
+        console.debug('handleReady playVideo error', e);
+      }
     }
 
     if (onReady) {
@@ -405,11 +419,15 @@ const VideoPlayer = forwardRef(({
           if (playlistLabel) {
             showNotice(`播放清單 (${nextIndex + 1}/${playlistVideos.length})`, 'info');
           }
-          if (onVideoChange) {
-            onVideoChange(nextVideo, nextIndex);
-          } else {
+          lastLoadedVideoIdRef.current = nextVideo.id;
+          try {
             ytPlayer.loadVideoById(nextVideo.id);
             ytPlayer.playVideo();
+          } catch (e) {
+            console.debug('loadVideoById failed', e);
+          }
+          if (onVideoChange) {
+            onVideoChange(nextVideo, nextIndex);
           }
           return;
         }
@@ -420,11 +438,15 @@ const VideoPlayer = forwardRef(({
         if (playlistLabel) {
           showNotice(`播放清單循環 (1/${playlistVideos.length})`, 'info');
         }
-        if (onVideoChange) {
-          onVideoChange(playlistVideos[0], 0);
-        } else {
+        lastLoadedVideoIdRef.current = playlistVideos[0].id;
+        try {
           ytPlayer.loadVideoById(playlistVideos[0].id);
           ytPlayer.playVideo();
+        } catch (e) {
+          console.debug('loadVideoById failed', e);
+        }
+        if (onVideoChange) {
+          onVideoChange(playlistVideos[0], 0);
         }
         return;
       }
@@ -583,6 +605,41 @@ const VideoPlayer = forwardRef(({
       lastPlaybackSampleRef.current = details.seekTime;
     });
 
+    setHandler('nexttrack', () => {
+      const nextIndex = currentVideoIndexRef.current + 1;
+      if (playlistVideos.length > 0 && nextIndex < playlistVideos.length) {
+        const nextVideo = playlistVideos[nextIndex];
+        if (nextVideo?.id) {
+          currentVideoIndexRef.current = nextIndex;
+          lastLoadedVideoIdRef.current = nextVideo.id;
+          try {
+            playerRef.current?.loadVideoById?.(nextVideo.id);
+            playerRef.current?.playVideo?.();
+          } catch (e) {
+            console.debug('nexttrack error', e);
+          }
+          onVideoChange?.(nextVideo, nextIndex);
+        }
+      }
+    });
+    setHandler('previoustrack', () => {
+      const prevIndex = currentVideoIndexRef.current - 1;
+      if (playlistVideos.length > 0 && prevIndex >= 0) {
+        const prevVideo = playlistVideos[prevIndex];
+        if (prevVideo?.id) {
+          currentVideoIndexRef.current = prevIndex;
+          lastLoadedVideoIdRef.current = prevVideo.id;
+          try {
+            playerRef.current?.loadVideoById?.(prevVideo.id);
+            playerRef.current?.playVideo?.();
+          } catch (e) {
+            console.debug('previoustrack error', e);
+          }
+          onVideoChange?.(prevVideo, prevIndex);
+        }
+      }
+    });
+
     navigator.mediaSession.playbackState = playerState.playing ? 'playing' : 'paused';
 
     return () => {
@@ -591,8 +648,10 @@ const VideoPlayer = forwardRef(({
       setHandler('seekbackward', null);
       setHandler('seekforward', null);
       setHandler('seekto', null);
+      setHandler('nexttrack', null);
+      setHandler('previoustrack', null);
     };
-  }, [channelName, player, playerState.playing, seekRelative, syncCurrentTime, title, videoId]);
+  }, [channelName, onVideoChange, player, playerState.playing, playlistVideos, seekRelative, syncCurrentTime, title, videoId]);
 
   const handleMouseMove = () => {
     if (isTouchDevice) return;
@@ -834,11 +893,39 @@ const VideoPlayer = forwardRef(({
     }
   }, [isPipSupported, isTouchDevice, settings.enablePictureInPicture, showNotice, title, togglePictureInPicture]);
 
+  useEffect(() => {
+    if (lastLoadedVideoIdRef.current === videoId) {
+      return;
+    }
+    lastLoadedVideoIdRef.current = videoId;
+    const currentPlayer = playerRef.current;
+    if (currentPlayer && typeof currentPlayer.loadVideoById === 'function') {
+      try {
+        currentPlayer.loadVideoById(videoId);
+        currentPlayer.playVideo();
+      } catch (err) {
+        console.debug('loadVideoById failed', err);
+      }
+    }
+  }, [videoId]);
+
   useImperativeHandle(ref, () => ({
     toggleLoop,
     togglePictureInPicture: handleTogglePictureInPicture,
     togglePlay,
     setPlaybackRate,
+    loadVideo: (targetVideoId) => {
+      const currentPlayer = playerRef.current;
+      if (currentPlayer && targetVideoId) {
+        lastLoadedVideoIdRef.current = targetVideoId;
+        try {
+          currentPlayer.loadVideoById(targetVideoId);
+          currentPlayer.playVideo();
+        } catch (e) {
+          console.debug('loadVideo error', e);
+        }
+      }
+    },
     isLoopEnabled: () => loopEnabledRef.current,
     isPipActive,
     isPipSupported,
@@ -1008,7 +1095,7 @@ const VideoPlayer = forwardRef(({
         }}
       >
         <YouTube
-          videoId={videoId}
+          videoId={initialVideoIdRef.current}
           opts={opts}
           onReady={handleReady}
           onStateChange={handleStateChange}

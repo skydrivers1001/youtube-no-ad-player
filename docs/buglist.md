@@ -540,17 +540,28 @@ This document records known bugs and their resolutions for future reference.
 
 ---
 
-## BUG-017: 行動裝置瀏覽器自動播放限制（Autoplay Policy）對清單連播的阻擋
+## BUG-017: 行動裝置瀏覽器自動播放限制（Autoplay Policy）對清單連播的阻擋與換首需手動點擊
 
 - Date: 2026-10-11
-- Status: Open (未盡事項)
+- Status: Fixed
 - Affected route(s): `/watch/:videoId`
-- Affected component(s): `src/components/player/VideoPlayer.js`
+- Affected component(s): `src/components/player/VideoPlayer.js`, `src/pages/PlayerPage.js`
 
 ### Symptoms
-- 在手機瀏覽器（iOS Safari / Android Chrome）觀看播放清單時，當前一部影片結束、自動切換到下一部影片時，瀏覽器可能會因為沒有當前使用者手勢互動（User Gesture）而阻擋未靜音影片的自動播放，導致播放器停在第 0 秒靜止。
+- 播放清單切換下一首影片時，播放器停在第 0 秒靜止，必須使用者手動點擊畫面才能繼續播放，無法主動自動連播。
 
-### Proposed Fix / Action Items
-- 在觸發下一部影片播放時捕獲播放失敗錯誤（例如 `NotAllowedError`）。
-- 方案 A：降級為先靜音自動播放，並在畫面中央顯示「點擊解除靜音」提示按鈕。
-- 方案 B：在影片切換時若被阻擋，彈出顯眼的「播放下一部」快速點擊按鈕，引導使用者點擊一下手勢以繼續播放。
+### Root Cause
+1. `react-youtube` 套件在 `videoId` 屬性改變時，內部預設的 `shouldResetPlayer` 會摧毀原有的 iframe 並重新創建全新 iframe。這導致原本使用者已授權的媒體會話與播放狀態全數遺失，全新建立的 iframe 缺乏使用者手勢關聯（User Activation），直接被行動端瀏覽器（iOS Safari / Android Chrome）判定為未經授權的自動播放而加以阻擋。
+2. 播放清單影片播放完畢（`isEnded`）時，原邏輯僅觸發路由跳轉（`onVideoChange` -> `navigate`），未在同一個事件週期中直接呼叫 `loadVideoById` 與 `playVideo`。
+3. 播放清單手動點選項目時僅執行 `navigate`，未在點擊事件的手勢視窗內同步命令播放器實例載入。
+
+### Fix Implemented
+1. **固化 iframe 實例，避免銷毀重建**：在 `VideoPlayer.js` 中傳入 `initialVideoIdRef.current` 給 `<YouTube>` 組件，確保組件生命週期內不因路由變化或切歌而重新掛載 iframe。
+2. **無縫接續載入與立即播放**：當影片結束切換下一首或循環播放時，直接在 `isEnded` 當下以原實例呼叫 `ytPlayer.loadVideoById(nextVideo.id)` 與 `ytPlayer.playVideo()`，並同步更新父層網址，實現同會話內無縫連播。
+3. **點選清單即時啟動**：在 `PlayerPage.js` 點擊清單影片卡片時，於使用者原生手勢（`onClick`）當下同步調用 `playerRef.current?.loadVideo(video.id)`。
+4. **MediaSession 連播支援**：新增 `nexttrack` 與 `previoustrack` 處理函式，支援手機鎖定畫面、控制中心及耳機實體鍵換首時自動主動播放。
+
+### Validation
+- 播放清單播完當前歌曲後，自動載入下一首並立即主動播放，不再停頓在第 0 秒。
+- 手動在清單點擊其他曲目時，立即切換並直接播放。
+- 專案執行 `npm run build` 打包編譯成功。

@@ -464,7 +464,10 @@ const PlayerPage = () => {
                   {playlistVideos.map((video, index) => (
                     <Box
                       key={video.id}
-                      onClick={() => navigate(`/watch/${video.id}?list=${activePlaylistId}`)}
+                      onClick={() => {
+                        playerRef.current?.loadVideo(video.id);
+                        navigate(`/watch/${video.id}?list=${activePlaylistId}`);
+                      }}
                       sx={{
                         flexShrink: 0,
                         width: 140,
