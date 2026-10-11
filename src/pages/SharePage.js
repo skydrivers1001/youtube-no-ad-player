@@ -16,11 +16,22 @@ const SharePage = () => {
   const [resolutionError, setResolutionError] = useState('');
 
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const shareInput = useMemo(() => ({
-    title: searchParams.get('title') || '',
-    text: searchParams.get('text') || '',
-    url: searchParams.get('url') || '',
-  }), [searchParams]);
+  const shareInput = useMemo(() => {
+    const rawSearch = location.search.startsWith('?') ? location.search.slice(1) : location.search;
+    let decodedRaw = '';
+    try {
+      decodedRaw = decodeURIComponent(rawSearch);
+    } catch (_) {
+      decodedRaw = rawSearch;
+    }
+
+    return {
+      title: searchParams.get('title') || '',
+      text: searchParams.get('text') || '',
+      url: searchParams.get('url') || searchParams.get('q') || (decodedRaw.includes('youtu') ? decodedRaw : ''),
+      openExternalBrowser: searchParams.get('openExternalBrowser') || '',
+    };
+  }, [location.search, searchParams]);
 
   const parsed = useMemo(
     () => parseYouTubeSharePayload(shareInput),
@@ -31,20 +42,23 @@ const SharePage = () => {
   const isPlaylist = parsed?.type === 'playlist' && isValidPlaylistId(parsed.id);
 
   useEffect(() => {
+    const extraParams = new URLSearchParams();
+    if (shareInput.title) extraParams.set('title', shareInput.title);
+    if (shareInput.openExternalBrowser) extraParams.set('openExternalBrowser', shareInput.openExternalBrowser);
+
     if (isVideo) {
-      const title = shareInput.title || '';
-      const targetSearch = title ? `?title=${encodeURIComponent(title)}` : '';
-      navigate(`/watch/${parsed.id}${targetSearch}`, { replace: true });
+      const search = extraParams.toString() ? `?${extraParams.toString()}` : '';
+      navigate(`/watch/${parsed.id}${search}`, { replace: true });
       return;
     }
 
     if (isPlaylist) {
-      const title = shareInput.title || '';
-      const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+      if (parsed.playlistId) extraParams.set('list', parsed.playlistId);
+      const search = extraParams.toString() ? `?${extraParams.toString()}` : '';
       if (parsed.videoId && isValidVideoId(parsed.videoId)) {
-        navigate(`/watch/${parsed.videoId}?list=${parsed.playlistId}${titleParam}`, { replace: true });
+        navigate(`/watch/${parsed.videoId}${search}`, { replace: true });
       } else {
-        navigate(`/watch/playlist/${parsed.playlistId}?list=${parsed.playlistId}${titleParam}`, { replace: true });
+        navigate(`/watch/playlist/${parsed.playlistId}${search}`, { replace: true });
       }
       return;
     }
@@ -54,7 +68,7 @@ const SharePage = () => {
     } else {
       setResolutionError('無法辨識 YouTube 影片或播放清單連結');
     }
-  }, [navigate, parsed, shareInput.text, shareInput.title, shareInput.url, isVideo, isPlaylist]);
+  }, [navigate, parsed, shareInput, isVideo, isPlaylist]);
 
   if (isVideo || isPlaylist) {
     return (
