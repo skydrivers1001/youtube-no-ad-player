@@ -31,6 +31,15 @@ const ESTIMATED_MB_PER_PLAYBACK_SECOND = 0.12;
 const DATA_USAGE_BATCH_SECONDS = 15;
 const TOUCH_INLINE_CONTROLS_HEIGHT = 68;
 export const AVAILABLE_PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+export const SUBTITLE_LANGUAGES = [
+  { code: 'auto', label: '自動 (預設)' },
+  { code: 'zh-TW', label: '中文 (繁體)' },
+  { code: 'zh-CN', label: '中文 (簡體)' },
+  { code: 'en', label: '英文 (English)' },
+  { code: 'ja', label: '日文 (日本語)' },
+  { code: 'ko', label: '韓文 (한국어)' },
+  { code: 'none', label: '關閉字幕' },
+];
 
 const VideoPlayer = forwardRef(({
   videoId,
@@ -79,6 +88,8 @@ const VideoPlayer = forwardRef(({
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
   const [speedMenuAnchor, setSpeedMenuAnchor] = useState(null);
+  const [subtitleMenuAnchor, setSubtitleMenuAnchor] = useState(null);
+  const [currentSubtitleLang, setCurrentSubtitleLang] = useState(settings.defaultSubtitleLanguage || 'auto');
   const controlsTimeoutRef = useRef(null);
   const noticeTimeoutRef = useRef(null);
   const backgroundPausedRef = useRef(false);
@@ -255,8 +266,8 @@ const VideoPlayer = forwardRef(({
   });
 
   const opts = useMemo(() => {
-    const subtitleLang = settings.defaultSubtitleLanguage === 'auto' ? 'zh-TW' : settings.defaultSubtitleLanguage;
-    const isCcEnabled = settings.defaultSubtitlesEnabled !== false && subtitleLang !== 'none';
+    const activeLang = currentSubtitleLang === 'auto' ? 'zh-TW' : currentSubtitleLang;
+    const isCcEnabled = settings.defaultSubtitlesEnabled !== false && activeLang !== 'none';
 
     return {
       height: '100%',
@@ -269,16 +280,16 @@ const VideoPlayer = forwardRef(({
         modestbranding: 1,
         iv_load_policy: 3,
         cc_load_policy: isCcEnabled ? 1 : 0,
-        ...(isCcEnabled && subtitleLang ? { cc_lang_pref: subtitleLang } : {}),
-        hl: subtitleLang !== 'none' ? subtitleLang : 'zh-TW',
+        ...(isCcEnabled && activeLang ? { cc_lang_pref: activeLang } : {}),
+        hl: activeLang !== 'none' ? activeLang : 'zh-TW',
         playsinline: 1,
         ...(playlistId ? { listType: 'playlist', list: playlistId } : {}),
       },
     };
   }, [
+    currentSubtitleLang,
     isTouchDevice,
     playlistId,
-    settings.defaultSubtitleLanguage,
     settings.defaultSubtitlesEnabled,
   ]);
 
@@ -917,12 +928,28 @@ const VideoPlayer = forwardRef(({
     }
   };
 
+  const setSubtitleLanguage = useCallback((langCode) => {
+    setCurrentSubtitleLang(langCode);
+    const isEnabled = langCode !== 'none';
+    updatePlaybackState((prev) => ({ ...prev, subtitlesEnabled: isEnabled }));
+    applySubtitles(isEnabled, langCode);
+    const langObj = SUBTITLE_LANGUAGES.find((item) => item.code === langCode);
+    const langLabel = langObj ? langObj.label : langCode;
+    showNotice(isEnabled ? `字幕已切換為：${langLabel}` : '字幕已關閉', 'info');
+  }, [applySubtitles, showNotice, updatePlaybackState]);
+
   const toggleSubtitles = useCallback(() => {
     const newSubtitlesState = !playerStateRef.current.subtitlesEnabled;
+    const targetLang = newSubtitlesState
+      ? (currentSubtitleLang === 'none' ? (settings.defaultSubtitleLanguage === 'none' ? 'auto' : settings.defaultSubtitleLanguage) : currentSubtitleLang)
+      : 'none';
+    if (newSubtitlesState && currentSubtitleLang === 'none') {
+      setCurrentSubtitleLang(targetLang);
+    }
     updatePlaybackState((prev) => ({ ...prev, subtitlesEnabled: newSubtitlesState }));
-    applySubtitles(newSubtitlesState, settings.defaultSubtitleLanguage);
+    applySubtitles(newSubtitlesState, targetLang);
     showNotice(newSubtitlesState ? '字幕已開啟' : '字幕已關閉', 'info');
-  }, [applySubtitles, settings.defaultSubtitleLanguage, showNotice, updatePlaybackState]);
+  }, [applySubtitles, currentSubtitleLang, settings.defaultSubtitleLanguage, showNotice, updatePlaybackState]);
 
   const toggleLoop = useCallback(() => {
     const next = !loopEnabledRef.current;
@@ -948,6 +975,22 @@ const VideoPlayer = forwardRef(({
     event?.stopPropagation?.();
     setPlaybackRate(rate);
     setSpeedMenuAnchor(null);
+  };
+
+  const handleSubtitleMenuOpen = (event) => {
+    event.stopPropagation();
+    setSubtitleMenuAnchor(event.currentTarget);
+  };
+
+  const handleSubtitleMenuClose = (event) => {
+    event?.stopPropagation?.();
+    setSubtitleMenuAnchor(null);
+  };
+
+  const handleSelectSubtitleLang = (langCode, event) => {
+    event?.stopPropagation?.();
+    setSubtitleLanguage(langCode);
+    setSubtitleMenuAnchor(null);
   };
 
   const handleSeekPreview = (_, newValue) => {
@@ -1081,6 +1124,8 @@ const VideoPlayer = forwardRef(({
     togglePlay,
     setPlaybackRate,
     toggleSubtitles,
+    setSubtitleLanguage,
+    getCurrentSubtitleLanguage: () => currentSubtitleLang,
     isSubtitlesEnabled: () => playerStateRef.current.subtitlesEnabled,
     getPlaybackRate: () => playerStateRef.current.playbackRate,
     loadVideo: (targetVideoId) => {
@@ -1098,7 +1143,7 @@ const VideoPlayer = forwardRef(({
     isLoopEnabled: () => loopEnabledRef.current,
     isPipActive,
     isPipSupported,
-  }), [handleTogglePictureInPicture, isPipActive, isPipSupported, setPlaybackRate, toggleLoop, togglePlay, toggleSubtitles]);
+  }), [currentSubtitleLang, handleTogglePictureInPicture, isPipActive, isPipSupported, setPlaybackRate, setSubtitleLanguage, toggleLoop, togglePlay, toggleSubtitles]);
 
   const handleTouchGestureStart = (side, event) => {
     const touch = event.touches?.[0];
@@ -1480,10 +1525,10 @@ const VideoPlayer = forwardRef(({
                 </Button>
               </Tooltip>
 
-              <Tooltip title={playerState.subtitlesEnabled ? '關閉字幕' : '開啟字幕'}>
+              <Tooltip title="字幕語言設定">
                 <IconButton
                   size="small"
-                  onClick={toggleSubtitles}
+                  onClick={handleSubtitleMenuOpen}
                   sx={{
                     color: playerState.subtitlesEnabled ? 'primary.main' : 'white',
                     '&:hover': {
@@ -1570,6 +1615,46 @@ const VideoPlayer = forwardRef(({
             }}
           >
             {rate}x {rate === 1 ? '(正常)' : ''}
+          </MenuItem>
+        ))}
+      </Menu>
+
+      {/* 字幕語言下拉選單 (共用) */}
+      <Menu
+        anchorEl={subtitleMenuAnchor}
+        open={Boolean(subtitleMenuAnchor)}
+        onClose={handleSubtitleMenuClose}
+        PaperProps={{
+          sx: {
+            bgcolor: 'rgba(24, 24, 27, 0.95)',
+            color: 'white',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            zIndex: 100002,
+          }
+        }}
+      >
+        {SUBTITLE_LANGUAGES.map((lang) => (
+          <MenuItem
+            key={lang.code}
+            selected={
+              lang.code === 'none'
+                ? !playerState.subtitlesEnabled || currentSubtitleLang === 'none'
+                : playerState.subtitlesEnabled && currentSubtitleLang === lang.code
+            }
+            onClick={(e) => handleSelectSubtitleLang(lang.code, e)}
+            sx={{
+              fontSize: '0.85rem',
+              py: 0.8,
+              px: 2,
+              '&.Mui-selected': {
+                bgcolor: 'primary.main',
+                color: 'white',
+                '&:hover': { bgcolor: 'primary.dark' },
+              },
+            }}
+          >
+            {lang.label}
           </MenuItem>
         ))}
       </Menu>
@@ -1673,12 +1758,12 @@ const VideoPlayer = forwardRef(({
                   </Button>
                 </Tooltip>
 
-                <Tooltip title={playerState.subtitlesEnabled ? '關閉字幕' : '開啟字幕'}>
+                <Tooltip title="字幕語言設定">
                   <Button
                     size="small"
                     variant={playerState.subtitlesEnabled ? 'contained' : 'outlined'}
                     color={playerState.subtitlesEnabled ? 'primary' : 'inherit'}
-                    onClick={toggleSubtitles}
+                    onClick={handleSubtitleMenuOpen}
                     sx={{
                       minWidth: 'auto',
                       px: 0.8,

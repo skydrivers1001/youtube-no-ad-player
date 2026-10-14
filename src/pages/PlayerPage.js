@@ -3,7 +3,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Paper, Button, Menu, MenuItem, CircularProgress } from '@mui/material';
 import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart, FaShareAlt, FaCopy, FaRedo, FaExternalLinkAlt, FaClosedCaptioning, FaTachometerAlt } from 'react-icons/fa';
-import VideoPlayer, { AVAILABLE_PLAYBACK_RATES } from '../components/player/VideoPlayer';
+import VideoPlayer, { AVAILABLE_PLAYBACK_RATES, SUBTITLE_LANGUAGES } from '../components/player/VideoPlayer';
 import youtubeService from '../services/youtubeService';
 import {
   addVideoToPlaylist,
@@ -190,7 +190,14 @@ const PlayerPage = () => {
   const [speedAnchorEl, setSpeedAnchorEl] = useState(null);
   const speedMenuOpen = Boolean(speedAnchorEl);
   const [currentSpeed, setCurrentSpeed] = useState(settings.defaultPlaybackRate || 1);
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState(settings.defaultSubtitlesEnabled !== false);
+
+  // 字幕選單狀態
+  const [subtitleAnchorEl, setSubtitleAnchorEl] = useState(null);
+  const subtitleMenuOpen = Boolean(subtitleAnchorEl);
+  const [subtitleLang, setSubtitleLang] = useState(settings.defaultSubtitleLanguage || 'auto');
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(
+    settings.defaultSubtitlesEnabled !== false && settings.defaultSubtitleLanguage !== 'none'
+  );
   
   // 處理播放器就绪
   const handlePlayerReady = (player) => {
@@ -275,9 +282,20 @@ const PlayerPage = () => {
     handleSpeedMenuClose();
   };
 
-  const handleToggleSubtitles = () => {
-    playerRef.current?.toggleSubtitles?.();
-    setSubtitlesEnabled((prev) => !prev);
+  const handleSubtitleMenuOpen = (event) => {
+    setSubtitleAnchorEl(event.currentTarget);
+  };
+
+  const handleSubtitleMenuClose = () => {
+    setSubtitleAnchorEl(null);
+  };
+
+  const handleSelectSubtitle = (code) => {
+    setSubtitleLang(code);
+    const enabled = code !== 'none';
+    setSubtitlesEnabled(enabled);
+    playerRef.current?.setSubtitleLanguage?.(code);
+    handleSubtitleMenuClose();
   };
 
   // 建立本站播放網址；LINE 會依 openExternalBrowser 參數改用系統瀏覽器開啟
@@ -418,9 +436,11 @@ const PlayerPage = () => {
                 variant={subtitlesEnabled ? 'contained' : 'outlined'}
                 color={subtitlesEnabled ? 'primary' : 'inherit'}
                 startIcon={<FaClosedCaptioning />}
-                onClick={handleToggleSubtitles}
+                onClick={handleSubtitleMenuOpen}
               >
-                {subtitlesEnabled ? '字幕：開啟' : '字幕：關閉'}
+                {subtitlesEnabled
+                  ? `字幕：${SUBTITLE_LANGUAGES.find((item) => item.code === subtitleLang)?.label || '開啟'}`
+                  : '字幕：關閉'}
               </Button>
 
               <Button
@@ -519,6 +539,27 @@ const PlayerPage = () => {
                   onClick={() => handleSelectSpeed(rate)}
                 >
                   {rate}x {rate === 1 ? '(正常)' : ''}
+                </MenuItem>
+              ))}
+            </Menu>
+
+            {/* 字幕語言選單 */}
+            <Menu
+              anchorEl={subtitleAnchorEl}
+              open={subtitleMenuOpen}
+              onClose={handleSubtitleMenuClose}
+            >
+              {SUBTITLE_LANGUAGES.map((lang) => (
+                <MenuItem
+                  key={lang.code}
+                  selected={
+                    lang.code === 'none'
+                      ? !subtitlesEnabled || subtitleLang === 'none'
+                      : subtitlesEnabled && subtitleLang === lang.code
+                  }
+                  onClick={() => handleSelectSubtitle(lang.code)}
+                >
+                  {lang.label}
                 </MenuItem>
               ))}
             </Menu>
