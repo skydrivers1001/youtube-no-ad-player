@@ -593,7 +593,7 @@ This document records known bugs and their resolutions for future reference.
 ## BUG-019: 播放清單第二首後無法切至第三首及上一首/下一首按鈕失效
 
 - Date: 2026-10-11
-- Status: Fixed
+- Status: Fixed (已完成程式修復與 Build 編譯驗證，待真實設備實機覆蓋測試)
 - Affected route(s): `/watch/:videoId` (帶清單參數或播放清單模式)
 - Affected component(s): `src/components/player/VideoPlayer.js`, `src/pages/PlayerPage.js`
 
@@ -612,9 +612,17 @@ This document records known bugs and their resolutions for future reference.
 3. **路由安全防抖守衛**：在 `useEffect([videoId])` 中加入檢查，若播放器已經在播放目標 `videoId` 或原生清單已包含該曲目，跳過破壞性的 `loadVideoById`。
 4. **控制面板與 MediaSession 統一**：在桌面與手機自定義控制列全面加入實體【上一首 (`FaStepBackward`)】與【下一首 (`FaStepForward`)】按鈕，並與系統 MediaSession（`nexttrack`/`previoustrack`）及影片播畢（`isEnded`）完全對齊。
 
-### Validation
-- 播放清單從第 1 首播畢自動切換至第 2 首，第 2 首播畢順暢自動切換至第 3 首，並持續循序播放。
-- 點擊控制列的「下一首」可連續由第 1 首切到第 2 首、第 3 首、第 4 首...並支援循環；點擊「上一首」可正常回退。
-- 專案執行 `npm run build` 打包編譯通過（無錯誤）。
+### Current Validation Status (目前驗證狀態)
+- **已完成驗證（自動化與靜態邏輯）**：
+  - 專案執行 `npm run build` 生產模式打包編譯成功（Exit code: 0，無任何語法、型別或 Hook 依賴錯誤）。
+  - 代碼演算法審查通過：模數運算保證索引不會超出範圍，動態反查真實 `video_id` 確保狀態不會錯位。
+- **待使用者實機驗證（Pending Real Device Verification）**：
+  - **項目 1（手動切換）**：在播放清單中，連續點擊控制列的【下一首（⏭️）】，確認第一首 ➔ 第二首 ➔ 第三首 ➔ 第四首能連續切換；點擊【上一首（⏮️）】能正常倒退。
+  - **項目 2（自動連播）**：將第一首拖曳至結束前 3 秒，確認播畢切入第二首；將第二首同樣拖曳至結束前 3 秒，確認播畢能順利切入第三首並自動主動播放。
+  - **項目 3（系統 MediaSession）**：在手機鎖定畫面、控制中心或藍牙耳機上，按上一首/下一首實體按鍵確認能連動切歌。
+
+### Follow-ups & Notes
+- 行動端瀏覽器（iOS Safari / Android Chrome）與 PWA 有強烈快取機制，實機測試前務必下拉重新整理或從多工滑掉關閉 App 重新開啟，以載入最新編譯檔案。
+
 
 

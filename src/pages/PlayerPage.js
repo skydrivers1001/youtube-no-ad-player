@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Box, Typography, Container, Paper, Button, Menu, MenuItem, CircularProgress } from '@mui/material';
-import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart, FaShareAlt, FaCopy, FaRedo, FaExternalLinkAlt } from 'react-icons/fa';
-import VideoPlayer from '../components/player/VideoPlayer';
+import { FaPlus, FaRegClock, FaRegHeart, FaClock, FaHeart, FaShareAlt, FaCopy, FaRedo, FaExternalLinkAlt, FaClosedCaptioning, FaTachometerAlt } from 'react-icons/fa';
+import VideoPlayer, { AVAILABLE_PLAYBACK_RATES } from '../components/player/VideoPlayer';
 import youtubeService from '../services/youtubeService';
 import {
   addVideoToPlaylist,
@@ -185,11 +185,20 @@ const PlayerPage = () => {
   // 播放清單選單狀態
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
+
+  // 播放速度選單狀態
+  const [speedAnchorEl, setSpeedAnchorEl] = useState(null);
+  const speedMenuOpen = Boolean(speedAnchorEl);
+  const [currentSpeed, setCurrentSpeed] = useState(settings.defaultPlaybackRate || 1);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(settings.defaultSubtitlesEnabled !== false);
   
   // 處理播放器就绪
   const handlePlayerReady = (player) => {
     // 設置預設播放速度
-    player.setPlaybackRate(settings.defaultPlaybackRate);
+    const initialRate = settings.defaultPlaybackRate || 1;
+    player.setPlaybackRate(initialRate);
+    setCurrentSpeed(initialRate);
+    setSubtitlesEnabled(settings.defaultSubtitlesEnabled !== false);
 
     // YouTube 播放器本身也會提供影片標題與頻道，可避開 API 金鑰或 CORS 限制。
     const playerVideoData = player.getVideoData?.();
@@ -250,6 +259,25 @@ const PlayerPage = () => {
 
   const handleToggleQuickPlaylist = (playlistId) => {
     dispatch(toggleVideoInPlaylist({ playlistId, video: videoInfo }));
+  };
+
+  const handleSpeedMenuOpen = (event) => {
+    setSpeedAnchorEl(event.currentTarget);
+  };
+
+  const handleSpeedMenuClose = () => {
+    setSpeedAnchorEl(null);
+  };
+
+  const handleSelectSpeed = (rate) => {
+    setCurrentSpeed(rate);
+    playerRef.current?.setPlaybackRate?.(rate);
+    handleSpeedMenuClose();
+  };
+
+  const handleToggleSubtitles = () => {
+    playerRef.current?.toggleSubtitles?.();
+    setSubtitlesEnabled((prev) => !prev);
   };
 
   // 建立本站播放網址；LINE 會依 openExternalBrowser 參數改用系統瀏覽器開啟
@@ -378,6 +406,24 @@ const PlayerPage = () => {
             
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-start' }}>
               <Button
+                variant="outlined"
+                color="inherit"
+                startIcon={<FaTachometerAlt />}
+                onClick={handleSpeedMenuOpen}
+              >
+                倍速：{currentSpeed}x
+              </Button>
+
+              <Button
+                variant={subtitlesEnabled ? 'contained' : 'outlined'}
+                color={subtitlesEnabled ? 'primary' : 'inherit'}
+                startIcon={<FaClosedCaptioning />}
+                onClick={handleToggleSubtitles}
+              >
+                {subtitlesEnabled ? '字幕：開啟' : '字幕：關閉'}
+              </Button>
+
+              <Button
                 variant={loopEnabled ? 'contained' : 'outlined'}
                 color={loopEnabled ? 'primary' : 'inherit'}
                 startIcon={<FaRedo />}
@@ -456,6 +502,23 @@ const PlayerPage = () => {
                   onClick={() => handleAddToSpecificPlaylist(playlist.id)}
                 >
                   {playlist.name}
+                </MenuItem>
+              ))}
+            </Menu>
+
+            {/* 播放速度選單 */}
+            <Menu
+              anchorEl={speedAnchorEl}
+              open={speedMenuOpen}
+              onClose={handleSpeedMenuClose}
+            >
+              {AVAILABLE_PLAYBACK_RATES.map((rate) => (
+                <MenuItem
+                  key={rate}
+                  selected={currentSpeed === rate}
+                  onClick={() => handleSelectSpeed(rate)}
+                >
+                  {rate}x {rate === 1 ? '(正常)' : ''}
                 </MenuItem>
               ))}
             </Menu>

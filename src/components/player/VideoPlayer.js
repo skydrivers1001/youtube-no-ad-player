@@ -30,6 +30,7 @@ const NOTICE_AUTO_HIDE_MS = 3500;
 const ESTIMATED_MB_PER_PLAYBACK_SECOND = 0.12;
 const DATA_USAGE_BATCH_SECONDS = 15;
 const TOUCH_INLINE_CONTROLS_HEIGHT = 68;
+export const AVAILABLE_PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 const VideoPlayer = forwardRef(({
   videoId,
@@ -253,22 +254,28 @@ const VideoPlayer = forwardRef(({
     onExit: handlePipExit,
   });
 
-  const opts = useMemo(() => ({
-    height: '100%',
-    width: '100%',
-    playerVars: {
-      autoplay: 1,
-      controls: isTouchDevice ? 1 : 0,
-      rel: 0,
-      showinfo: 0,
-      modestbranding: 1,
-      iv_load_policy: 3,
-      cc_load_policy: settings.defaultSubtitlesEnabled ? 1 : 0,
-      hl: settings.defaultSubtitleLanguage === 'auto' ? 'zh-TW' : settings.defaultSubtitleLanguage,
-      playsinline: 1,
-      ...(playlistId ? { listType: 'playlist', list: playlistId } : {}),
-    },
-  }), [
+  const opts = useMemo(() => {
+    const subtitleLang = settings.defaultSubtitleLanguage === 'auto' ? 'zh-TW' : settings.defaultSubtitleLanguage;
+    const isCcEnabled = settings.defaultSubtitlesEnabled !== false && subtitleLang !== 'none';
+
+    return {
+      height: '100%',
+      width: '100%',
+      playerVars: {
+        autoplay: 1,
+        controls: isTouchDevice ? 1 : 0,
+        rel: 0,
+        showinfo: 0,
+        modestbranding: 1,
+        iv_load_policy: 3,
+        cc_load_policy: isCcEnabled ? 1 : 0,
+        ...(isCcEnabled && subtitleLang ? { cc_lang_pref: subtitleLang } : {}),
+        hl: subtitleLang !== 'none' ? subtitleLang : 'zh-TW',
+        playsinline: 1,
+        ...(playlistId ? { listType: 'playlist', list: playlistId } : {}),
+      },
+    };
+  }, [
     isTouchDevice,
     playlistId,
     settings.defaultSubtitleLanguage,
@@ -286,6 +293,33 @@ const VideoPlayer = forwardRef(({
       playerStateRef.current = nextState;
       return nextState;
     });
+  }, []);
+
+  const applySubtitles = useCallback((enabled, lang) => {
+    const yt = playerRef.current;
+    if (!yt) return;
+    try {
+      const targetLang = (!lang || lang === 'auto') ? 'zh-TW' : lang;
+      if (!enabled || targetLang === 'none') {
+        if (typeof yt.unloadModule === 'function') {
+          yt.unloadModule('captions');
+        }
+        if (typeof yt.setOption === 'function') {
+          yt.setOption('captions', 'track', {});
+        }
+      } else {
+        if (typeof yt.loadModule === 'function') {
+          yt.loadModule('captions');
+        }
+        if (typeof yt.setOption === 'function') {
+          yt.setOption('captions', 'reload', true);
+          yt.setOption('captions', 'track', { languageCode: targetLang });
+          yt.setOption('captions', 'displaySettings', { background: 'black' });
+        }
+      }
+    } catch (err) {
+      console.warn('字幕控制錯誤:', err);
+    }
   }, []);
 
   const syncCurrentTime = useCallback((nextTime) => {
@@ -497,6 +531,15 @@ const VideoPlayer = forwardRef(({
     }
   }, [playlistVideos, videoId, playlistLabel, showNotice, dispatch, onVideoChange, playlistId]);
 
+  useEffect(() => {
+    const isEnabled = settings.defaultSubtitlesEnabled !== false && settings.defaultSubtitleLanguage !== 'none';
+    updatePlaybackState((prev) => ({
+      ...prev,
+      subtitlesEnabled: isEnabled,
+    }));
+    applySubtitles(isEnabled, settings.defaultSubtitleLanguage);
+  }, [applySubtitles, settings.defaultSubtitleLanguage, settings.defaultSubtitlesEnabled, updatePlaybackState]);
+
   const handleReady = useCallback((event) => {
     const ytPlayer = event.target;
     setPlayer(ytPlayer);
@@ -507,6 +550,10 @@ const VideoPlayer = forwardRef(({
       ytPlayer.mute();
     } else {
       ytPlayer.unMute();
+    }
+
+    if (playerStateRef.current.subtitlesEnabled) {
+      applySubtitles(true, settings.defaultSubtitleLanguage);
     }
 
     lastPlaybackSampleRef.current = ytPlayer.getCurrentTime?.() || 0;
@@ -538,7 +585,7 @@ const VideoPlayer = forwardRef(({
       onReady(ytPlayer);
     }
     syncPlaylistFromPlayer(ytPlayer);
-  }, [autoplay, onReady, savedProgress, syncPlaylistFromPlayer]);
+  }, [applySubtitles, autoplay, onReady, savedProgress, settings.defaultSubtitleLanguage, syncPlaylistFromPlayer]);
 
   const handleStateChange = useCallback((event) => {
     const ytPlayer = event.target;
@@ -550,6 +597,10 @@ const VideoPlayer = forwardRef(({
       playing: isPlaying,
       duration: ytPlayer.getDuration?.() || 0,
     }));
+
+    if (isPlaying && playerStateRef.current.subtitlesEnabled) {
+      applySubtitles(true, settings.defaultSubtitleLanguage);
+    }
 
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
@@ -592,7 +643,7 @@ const VideoPlayer = forwardRef(({
       // 呼叫統一的下一首處理（原生清單 / 應用層清單）
       playNextVideo();
     }
-  }, [dispatch, flushPendingUsage, updatePlaybackState, videoId, playlistVideos, onVideoChange, title, channelName, playNextVideo]);
+  }, [applySubtitles, dispatch, flushPendingUsage, onVideoChange, playNextVideo, playlistVideos, settings.defaultSubtitleLanguage, title, channelName, updatePlaybackState, videoId]);
 
   useEffect(() => {
     if (!player) return;
@@ -822,11 +873,15 @@ const VideoPlayer = forwardRef(({
   };
 
   const setPlaybackRate = useCallback((rate) => {
+    updatePlaybackState((prev) => ({ ...prev, playbackRate: rate }));
     const currentPlayer = playerRef.current;
     if (!currentPlayer) return;
 
-    currentPlayer.setPlaybackRate(rate);
-    updatePlaybackState((prev) => ({ ...prev, playbackRate: rate }));
+    try {
+      currentPlayer.setPlaybackRate(rate);
+    } catch (e) {
+      console.debug('setPlaybackRate error', e);
+    }
   }, [updatePlaybackState]);
 
   const toggleFullscreen = async () => {
@@ -862,27 +917,12 @@ const VideoPlayer = forwardRef(({
     }
   };
 
-  const toggleSubtitles = () => {
-    const currentPlayer = playerRef.current;
-    if (!currentPlayer) return;
-
+  const toggleSubtitles = useCallback(() => {
     const newSubtitlesState = !playerStateRef.current.subtitlesEnabled;
     updatePlaybackState((prev) => ({ ...prev, subtitlesEnabled: newSubtitlesState }));
-
-    try {
-      if (newSubtitlesState) {
-        const language = settings.defaultSubtitleLanguage === 'auto' ? 'zh-TW' : settings.defaultSubtitleLanguage;
-        if (language !== 'none') {
-          currentPlayer.setOption('captions', 'reload', true);
-          currentPlayer.setOption('captions', 'displaySettings', { background: 'black' });
-        }
-      } else {
-        currentPlayer.unloadModule('captions');
-      }
-    } catch (error) {
-      console.log('字幕控制錯誤:', error);
-    }
-  };
+    applySubtitles(newSubtitlesState, settings.defaultSubtitleLanguage);
+    showNotice(newSubtitlesState ? '字幕已開啟' : '字幕已關閉', 'info');
+  }, [applySubtitles, settings.defaultSubtitleLanguage, showNotice, updatePlaybackState]);
 
   const toggleLoop = useCallback(() => {
     const next = !loopEnabledRef.current;
@@ -1040,6 +1080,9 @@ const VideoPlayer = forwardRef(({
     togglePictureInPicture: handleTogglePictureInPicture,
     togglePlay,
     setPlaybackRate,
+    toggleSubtitles,
+    isSubtitlesEnabled: () => playerStateRef.current.subtitlesEnabled,
+    getPlaybackRate: () => playerStateRef.current.playbackRate,
     loadVideo: (targetVideoId) => {
       const currentPlayer = playerRef.current;
       if (currentPlayer && targetVideoId) {
@@ -1055,7 +1098,7 @@ const VideoPlayer = forwardRef(({
     isLoopEnabled: () => loopEnabledRef.current,
     isPipActive,
     isPipSupported,
-  }), [handleTogglePictureInPicture, isPipActive, isPipSupported, setPlaybackRate, toggleLoop, togglePlay]);
+  }), [handleTogglePictureInPicture, isPipActive, isPipSupported, setPlaybackRate, toggleLoop, togglePlay, toggleSubtitles]);
 
   const handleTouchGestureStart = (side, event) => {
     const touch = event.touches?.[0];
@@ -1510,7 +1553,7 @@ const VideoPlayer = forwardRef(({
           }
         }}
       >
-        {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+        {AVAILABLE_PLAYBACK_RATES.map((rate) => (
           <MenuItem
             key={rate}
             selected={playerState.playbackRate === rate}
@@ -1615,37 +1658,62 @@ const VideoPlayer = forwardRef(({
                     disabled={!isPipSupported}
                     sx={{
                       minWidth: 'auto',
-                      px: 1,
+                      px: 0.8,
                       py: 0.25,
                       fontSize: '0.75rem',
                       borderColor: 'rgba(255,255,255,0.3)',
                       color: isPipActive ? 'white' : 'rgba(255,255,255,0.9)',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 0.5,
+                      gap: 0.4,
                     }}
                   >
-                    <FaExternalLinkAlt size={11} />
+                    <FaExternalLinkAlt size={10} />
                     小窗
                   </Button>
                 </Tooltip>
 
-                <Button
-                  size="small"
-                  onClick={handleSpeedMenuOpen}
-                  sx={{
-                    minWidth: 'auto',
-                    px: 0.8,
-                    py: 0.25,
-                    fontSize: '0.75rem',
-                    bgcolor: 'rgba(255,255,255,0.12)',
-                    color: 'white',
-                    borderRadius: 1,
-                    textTransform: 'none',
-                  }}
-                >
-                  {playerState.playbackRate}x
-                </Button>
+                <Tooltip title={playerState.subtitlesEnabled ? '關閉字幕' : '開啟字幕'}>
+                  <Button
+                    size="small"
+                    variant={playerState.subtitlesEnabled ? 'contained' : 'outlined'}
+                    color={playerState.subtitlesEnabled ? 'primary' : 'inherit'}
+                    onClick={toggleSubtitles}
+                    sx={{
+                      minWidth: 'auto',
+                      px: 0.8,
+                      py: 0.25,
+                      fontSize: '0.75rem',
+                      borderColor: 'rgba(255,255,255,0.3)',
+                      color: playerState.subtitlesEnabled ? 'white' : 'rgba(255,255,255,0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.4,
+                    }}
+                  >
+                    <FaClosedCaptioning size={11} />
+                    字幕
+                  </Button>
+                </Tooltip>
+
+                <Tooltip title="播放速度">
+                  <Button
+                    size="small"
+                    onClick={handleSpeedMenuOpen}
+                    sx={{
+                      minWidth: 'auto',
+                      px: 0.8,
+                      py: 0.25,
+                      fontSize: '0.75rem',
+                      bgcolor: 'rgba(255,255,255,0.12)',
+                      color: 'white',
+                      borderRadius: 1,
+                      textTransform: 'none',
+                    }}
+                  >
+                    {playerState.playbackRate}x
+                  </Button>
+                </Tooltip>
               </Box>
             </Box>
           </Box>
